@@ -1,0 +1,38 @@
+# Sidewalk taxonomy names must match id2label.json exactly.
+# name = English SAM3 text prompt; multiple alternatives are separated by |.
+# IDs stay unchanged. unlabeled (0) is not prompted.
+flat-road = road
+flat-sidewalk = sidewalk
+flat-crosswalk = pedestrian crosswalk
+flat-cyclinglane = bicycle lane
+flat-parkingdriveway = parking area | driveway
+flat-railtrack = railway track
+flat-curb = curb
+human-person = person
+human-rider = person riding a bicycle | person riding a motorcycle
+vehicle-car = car
+vehicle-truck = truck
+vehicle-bus = bus
+vehicle-tramtrain = tram | train
+vehicle-motorcycle = motorcycle
+vehicle-bicycle = bicycle
+vehicle-caravan = caravan
+vehicle-cartrailer = car trailer
+construction-building = building
+construction-door = door
+construction-wall = wall
+construction-fenceguardrail = fence | guardrail
+construction-bridge = bridge
+construction-tunnel = tunnel
+construction-stairs = stairs
+object-pole = pole
+object-trafficsign = traffic sign
+object-trafficlight = traffic light
+nature-vegetation = vegetation
+nature-terrain = terrain
+sky = sky
+# Void categories have no exact visual concept; these prompts are approximations.
+void-ground = other ground surface
+void-dynamic = other moving object
+void-static = other stationary object
+void-unclear = unclear object

@@ -1,0 +1,18 @@
+# nuScenes lidarseg official 16-class evaluation taxonomy.
+# Class 0 is ignored/unassigned. Keep the names on the left unchanged.
+barrier = road barrier
+bicycle = bicycle
+bus = bus
+car = car
+construction_vehicle = construction vehicle
+motorcycle = motorcycle
+pedestrian = person
+traffic_cone = traffic cone
+trailer = trailer
+truck = truck
+driveable_surface = road
+other_flat = traffic island | rail track
+sidewalk = sidewalk
+terrain = natural ground
+manmade = building | wall | fence | pole | traffic sign
+vegetation = vegetation

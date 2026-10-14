@@ -1,0 +1,5 @@
+# Additional mask-decoding dependencies for the existing WSL vla-supervised environment.
+# Keep its installed SAM3/torch/torchvision/CUDA stack.
+pycocotools>=2.0.7
+Pillow>=10
+numpy>=1.26
