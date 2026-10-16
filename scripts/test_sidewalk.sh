@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
+# Compatibility launcher; implementation lives with its task.
 set -euo pipefail
 project_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-cd -- "$project_root"
-exec bash "$project_root/scripts/run_vla.sh" -m unittest discover -s tests -v
+exec bash "$project_root/shared/scripts/test_all.sh" "$@"

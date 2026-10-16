@@ -1,0 +1,5 @@
+# Additional dependencies for the existing WSL vla-supervised SAM3 environment.
+# Keep its installed torch/CUDA/SAM3 stack; this file does not replace that stack.
+pyarrow>=18
+Pillow>=10
+numpy>=1.26

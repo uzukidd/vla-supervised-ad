@@ -1,0 +1,10 @@
+# One class per line, in English for SAM3 text prompts.
+# Optional: display_name = prompt | alternative prompt
+road
+sidewalk
+crosswalk = pedestrian crosswalk
+person
+car
+bicycle
+vegetation
+sky

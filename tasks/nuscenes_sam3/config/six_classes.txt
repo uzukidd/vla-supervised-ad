@@ -1,0 +1,8 @@
+# Six output classes. Keep left-hand names and order unchanged.
+# Edit English SAM3 prompts on the right; | separates alternatives.
+sidewalk = sidewalk
+road = road
+pedestrian = person on foot | pedestrian
+vehicle = car | truck | bus | trailer
+bike = bicycle | motorcycle
+rider = person riding a bicycle | person riding a motorcycle

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Compatibility launcher; implementation lives with its task.
 set -euo pipefail
-script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-exec bash "$script_dir/run_vla.sh" "$script_dir/../python/nuscenes_pointcloud.py" "$@"
+project_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+exec bash "$project_root/tasks/nuscenes_sam3/scripts/color_nuscenes_pointcloud.sh" "$@"

@@ -1,0 +1,5 @@
+# Inference adapter only; reuse the existing vla-supervised CUDA torch/torchvision.
+# This is not the upstream legacy MMCV training environment.
+numpy>=1.26
+Pillow>=10
+opencv-python>=4.8

@@ -1,8 +1,5 @@
 #!/usr/bin/env bash
-# One LiDAR keyframe, all six cameras, semantic point-cloud export by default.
+# Compatibility launcher; implementation lives with its task.
 set -euo pipefail
-script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-exec bash "$script_dir/run_vla.sh" "$script_dir/../python/sam3_nuscenes.py" \
-  --mode lidarseg \
-  --cameras CAM_FRONT CAM_FRONT_LEFT CAM_FRONT_RIGHT CAM_BACK CAM_BACK_LEFT CAM_BACK_RIGHT \
-  --max-images 6 --export-pointcloud "$@"
+project_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+exec bash "$project_root/tasks/nuscenes_sam3/scripts/segment_nuscenes_6cams.sh" "$@"

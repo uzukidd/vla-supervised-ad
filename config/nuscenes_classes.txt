@@ -15,4 +15,4 @@ other_flat = traffic island | rail track
 sidewalk = sidewalk
 terrain = natural ground
 manmade = building | wall | fence | pole | traffic sign
-vegetation = vegetation
+vegetation = vegetation | tree | bush | grass

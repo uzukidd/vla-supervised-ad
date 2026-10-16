@@ -1,0 +1,2 @@
+# Compatibility requirements; canonical task dependencies follow.
+-r tasks/effocc/requirements.txt
