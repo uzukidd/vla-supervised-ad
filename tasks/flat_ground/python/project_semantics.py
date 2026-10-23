@@ -15,6 +15,7 @@ from PIL import Image, ImageDraw
 from shared.python.runtime import ROOT, ensure_environment, save_json
 from shared.python.sam3 import Sam3Segmenter, make_palette, overlay, draw_text
 from tasks.nuscenes_sam3.python.six_class import NAMES, RiderMask, categories_from_txt
+from tasks.nuscenes_sam3.python.semantic_schema import saved_schema,resolve_planes,taxonomy_from_categories,palette_for
 from tasks.flat_ground.python.geometry import pose_matrix, ego_yaw_frame, bev_ground_grid, project_ground_to_camera
 
 CAMERAS = ('CAM_FRONT','CAM_FRONT_LEFT','CAM_FRONT_RIGHT','CAM_BACK','CAM_BACK_LEFT','CAM_BACK_RIGHT')
@@ -22,11 +23,14 @@ CAMERAS = ('CAM_FRONT','CAM_FRONT_LEFT','CAM_FRONT_RIGHT','CAM_BACK','CAM_BACK_L
 
 class CameraFrames:
     """Read only nuScenes camera metadata; no LiDAR data/labels/tables required."""
-    def __init__(self, root: Path):
+    def __init__(self, root: Path, version: str = 'v1.0-mini'):
+        if version not in ('v1.0-mini','v1.0-trainval','v1.0-test'):
+            raise ValueError(f'Unsupported nuScenes version {version!r}; use v1.0-mini, v1.0-trainval or v1.0-test')
         self.root=Path(root)
+        self.version=version
         self.tables={}
         for name in ('scene','sample','sample_data','sensor','calibrated_sensor','ego_pose'):
-            rows=json.loads((self.root/'v1.0-mini'/f'{name}.json').read_text())
+            rows=json.loads((self.root/version/f'{name}.json').read_text())
             self.tables[name]={row['token']:row for row in rows}
             if len(rows)!=len(self.tables[name]):raise ValueError(f'Duplicate {name} tokens')
         self.channels={}
@@ -42,7 +46,8 @@ class CameraFrames:
     def frames(self, split='mini_val', scenes=None):
         splits={'mini_val':{'scene-0103','scene-0916'},'mini_train':{'scene-0061','scene-0553','scene-0655','scene-0757','scene-0796','scene-1077','scene-1094','scene-1100'}}
         available={row['name'] for row in self.tables['scene'].values()}
-        if split not in ('all',*splits):raise ValueError('Unsupported mini split')
+        if split not in ('all',*splits):raise ValueError('Unsupported split; use all, mini_train or mini_val')
+        if split!='all' and self.version!='v1.0-mini':raise ValueError(f'{split} requires version v1.0-mini')
         chosen=available if split=='all' else available & splits[split]
         if scenes:
             if set(scenes)-available:raise ValueError('Unknown scene name')
@@ -98,20 +103,23 @@ def color_image(labels,palette):
     return Image.fromarray(pixels)
 
 
-def render_comparison(images,palette,title):
+def render_comparison(images,palette,title,names=None):
+    names=names or NAMES
     n=images[0][1].width
-    panel=Image.new('RGB',(n*len(images),n+130),'white');draw=ImageDraw.Draw(panel)
+    panel=Image.new('RGB',(n*len(images),n+100+((len(names)-1+2)//3)*24),'white');draw=ImageDraw.Draw(panel)
     for i,(label,image) in enumerate(images):
         panel.paste(image,(i*n,30));draw_text(draw,(i*n+8,8),label)
     draw_text(draw,(10,n+40),title)
     draw_text(draw,(10,n+65),'Assumed plane, not LiDAR evidence or verified surface. No semantic/geometry accuracy metric.')
-    for i in range(1,7):
-        x=12+((i-1)%3)*n;y=n+92+((i-1)//3)*24
-        draw.rectangle((x,y,x+15,y+15),fill=tuple(int(v) for v in palette[i]));draw_text(draw,(x+23,y),f'{i}: {NAMES[i]}')
+    for index,i in enumerate(cid for cid in names if cid):
+        x=12+(index%3)*n;y=n+92+(index//3)*24
+        draw.rectangle((x,y,x+15,y+15),fill=tuple(int(v) for v in palette[i]));draw_text(draw,(x+23,y),f'{i}: {names[i]}')
     return panel
 
 
-def project_frame(output, cameras, masks, plane_z=0., roi_size=100., resolution=.2, min_depth=.5,max_distance=80.,project_ids=(1,2)):
+def project_frame(output, cameras, masks, plane_z=0., roi_size=100., resolution=.2, min_depth=.5,max_distance=80.,project_ids=(1,2),names=None):
+    names=names or NAMES
+    project_ids=resolve_planes(names,default_ids=project_ids)
     output=Path(output)
     if output.exists() and (not output.is_dir() or any(output.iterdir())):raise FileExistsError(output)
     if len(cameras)!=6 or len(masks)!=6 or tuple(camera['camera'] for camera in cameras)!=CAMERAS:
@@ -122,7 +130,7 @@ def project_frame(output, cameras, masks, plane_z=0., roi_size=100., resolution=
     geometries=[];label_grids=[]
     for camera,mask in zip(cameras,masks):
         with Image.open(camera['image_path']) as image:size=image.size
-        if mask.shape!=(size[1],size[0]) or mask.dtype!=np.uint8 or np.any(mask>6):raise ValueError('Six-class full-resolution masks required')
+        if mask.shape!=(size[1],size[0]) or mask.dtype!=np.uint8 or np.any(mask>=len(names)):raise ValueError('Full-resolution masks must match saved taxonomy')
         geometry=project_ground_to_camera(xy,global_from_bev,camera['camera_to_global'],camera['intrinsic'],size,
                                           min_depth=min_depth,max_distance=max_distance)
         semantic=np.zeros(xy.shape[:2],dtype=np.uint8)
@@ -130,11 +138,10 @@ def project_frame(output, cameras, masks, plane_z=0., roi_size=100., resolution=
         semantic[valid]=mask[uv[:,1],uv[:,0]]
         label_grids.append(semantic);geometries.append(geometry)
     fused=fuse_ground_views(label_grids,geometries,project_ids)
-    palette=make_palette();palette[1]=(210,70,180);palette[2]=(210,155,20);palette[3]=(35,110,225)
-    palette[4]=(200,55,45);palette[5]=(40,160,85);palette[6]=(125,65,210)
+    palette=palette_for(names)
     output.mkdir(parents=True,exist_ok=True)
     save_json(output/'classes.json',[{'id':cid,'name':name,'color_rgb':palette[cid].tolist(),
-              'projected_by_default':cid in project_ids} for cid,name in NAMES.items()])
+              'projected_by_default':cid in project_ids} for cid,name in names.items()])
     per_camera=output/'cameras';per_camera.mkdir()
     records=[]
     for camera,mask,semantic,geometry in zip(cameras,masks,label_grids,geometries):
@@ -170,17 +177,17 @@ def project_frame(output, cameras, masks, plane_z=0., roi_size=100., resolution=
     source_image=Image.fromarray(source_rgb);source_image.save(output/'bev_source_camera.png')
     render_comparison([('Semantic ground plane IPM',final),('Geometric camera coverage (1..6 views)',count_image),
                        ('Selected semantic evidence camera',source_image)],palette,
-                      f'{roi_size:g}mx{roi_size:g}m | {resolution:g}m/cell | global z={plane_z:g}m | +X forward (right in PNG), +Y left (up in PNG)').save(output/'bev_comparison.png')
+                      f'{roi_size:g}mx{roi_size:g}m | {resolution:g}m/cell | global z={plane_z:g}m | +X forward (right in PNG), +Y left (up in PNG)',names).save(output/'bev_comparison.png')
     np.savez_compressed(output/'ipm_grid.npz',**fused,local_xy=xy,global_from_bev=global_from_bev,
                         camera_names=np.array([camera['camera'] for camera in cameras]),plane_z=np.array(plane_z))
     metadata={**grid,'plane_z_global_m':plane_z,'reference_camera':'CAM_FRONT','reference_timestamp':reference['timestamp'],
               'bev_frame':'horizontal yaw-aligned ego XY centered at CAM_FRONT ego position; local z=0 is global plane_z',
               'sampling':'BEV cell center -> world z=plane_z -> camera pixel nearest neighbor, no LiDAR points',
-              'project_class_ids':list(project_ids),'project_class_names':[NAMES[i] for i in project_ids],
+              'project_class_ids':list(project_ids),'project_class_names':[names[i] for i in project_ids],
               'fusion':'Accepted ground label from greatest plane-ray incidence (more fronto-parallel); camera order breaks ties',
               'valid_intersection':'camera depth positive/min_depth, inside original image, camera slant distance<=max_distance',
               'max_camera_distance_m':max_distance,'min_camera_depth_m':min_depth,'cameras':records,
-              'semantic_cells':{NAMES[i]:int((fused['labels']==i).sum()) for i in project_ids},
+              'semantic_cells':{names[i]:int((fused['labels']==i).sum()) for i in project_ids},
               'geometric_covered_cells':int((fused['camera_count']>0).sum()),'unassigned_cells':int((fused['labels']==0).sum()),
               'evaluation':None,'limitations':'Flat-plane hypothesis only; global nuScenes z is a local map coordinate, not geodetic sea-level altitude. '
                   'Slope, sidewalk curb height, occlusion and calibration/segmentation error distort ground labels. '
@@ -216,6 +223,7 @@ def write_page(output,frames):
 def parser():
     p=argparse.ArgumentParser(description=__doc__,formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     p.add_argument('--dataset-dir',type=Path,default=ROOT/'datasets/nuscenes')
+    p.add_argument('--version',choices=('v1.0-mini','v1.0-trainval','v1.0-test'),default='v1.0-mini')
     p.add_argument('--input-dir',type=Path,help='Reuse existing six-class run root or sample directory without SAM3 inference')
     p.add_argument('--checkpoint',type=Path,default=ROOT/'models/sam3/sam3.pt')
     p.add_argument('--classes-file',type=Path,default=ROOT/'tasks/nuscenes_sam3/config/six_classes.txt')
@@ -224,7 +232,7 @@ def parser():
     p.add_argument('--plane-z',type=float,default=0.,help='Assumed horizontal plane height in nuScenes global map coordinates, meters')
     p.add_argument('--bev-roi-size',type=float,default=100.);p.add_argument('--bev-resolution',type=float,default=.2)
     p.add_argument('--max-distance',type=float,default=80.,help='Maximum camera-to-ground intersection distance, meters')
-    p.add_argument('--project-classes',nargs='+',choices=list(NAMES.values())[1:],default=['sidewalk','road'])
+    p.add_argument('--plane-classes','--project-classes',dest='plane_classes',nargs='+',default=None,help='Class names to project as planes; default saved choice or sidewalk road')
     p.add_argument('--device',choices=('cuda','cpu'),default='cuda');p.add_argument('--precision',choices=('bf16','fp32','fp16'),default='bf16')
     p.add_argument('--score-threshold',type=float,default=.5);p.add_argument('--mask-threshold',type=float,default=.5)
     p.add_argument('--output-dir',type=Path)
@@ -238,10 +246,9 @@ def main(argv=None):
     if not np.isfinite(args.max_distance) or args.max_distance<=0:raise ValueError('max-distance must be positive')
     if not all(np.isfinite(v) and 0<=v<=1 for v in (args.score_threshold,args.mask_threshold)):raise ValueError('Thresholds in[0,1] required')
     bev_ground_grid(args.bev_roi_size,args.bev_resolution)
-    project_ids=tuple(i for i,name in NAMES.items() if name in args.project_classes)
     output=(args.output_dir or ROOT/'outputs/flat_ground'/datetime.now().strftime('%Y%m%d_%H%M%S_%f')).resolve()
     if output.exists() and (not output.is_dir() or any(output.iterdir())):raise FileExistsError(output)
-    dataset=CameraFrames(args.dataset_dir.resolve())
+    dataset=CameraFrames(args.dataset_dir.resolve(),version=args.version)
     saved=[]
     if args.input_dir:
         source=args.input_dir.resolve()
@@ -256,13 +263,21 @@ def main(argv=None):
     else:
         selections=dataset.frames(args.split,args.scenes)[args.start_index:args.start_index+args.samples]
     if not selections:raise ValueError('No selected frames')
+    if args.input_dir:names,default_planes=saved_schema(selections[0]['source'],allow_legacy=True)
+    else:
+        categories=categories_from_txt(args.classes_file.resolve());names=taxonomy_from_categories(categories);default_planes=None
+    if args.input_dir:
+        for record in selections:
+            frame_names,_=saved_schema(record['source'],allow_legacy=True)
+            if frame_names!=names:raise ValueError('Selected saved frames have different taxonomies')
+    project_ids=resolve_planes(names,args.plane_classes,default_planes)
     segmenter=None
     if not args.input_dir:
         categories=categories_from_txt(args.classes_file.resolve())
         segmenter=Sam3Segmenter(args.checkpoint.resolve(),args.device,args.precision,args.score_threshold,args.mask_threshold)
     output.mkdir(parents=True,exist_ok=True)
     config={key:str(value) if isinstance(value,Path) else value for key,value in vars(args).items()}
-    config.update(status='running',processed_frames=0,lidar_used=False,started_at=datetime.now(timezone.utc).isoformat())
+    config.update(status='running',processed_frames=0,lidar_used=False,taxonomy=names,plane_class_ids=list(project_ids),started_at=datetime.now(timezone.utc).isoformat())
     save_json(output/'run_config.json',config)
     completed=[]
     try:
@@ -273,12 +288,12 @@ def main(argv=None):
                 masks=[]
                 for camera in cameras:
                     with Image.open(camera['image_path']) as source:image=source.convert('RGB')
-                    rider=RiderMask((image.height,image.width));prediction,_=segmenter.predict(image,categories,instance_callback=rider)
+                    rider=RiderMask((image.height,image.width),names);prediction,_=segmenter.predict(image,categories,instance_callback=rider)
                     masks.append(rider.apply(prediction))
             stem=f"{record['scene_name']}_{args.start_index+i:06d}_{record['sample_token']}"
             frame=output/stem
             metadata=project_frame(frame,cameras,masks,args.plane_z,args.bev_roi_size,args.bev_resolution,
-                                   max_distance=args.max_distance,project_ids=project_ids)
+                                   max_distance=args.max_distance,project_ids=project_ids,names=names)
             print(f"{stem}: {metadata['width']}x{metadata['height']}, classes={metadata['semantic_cells']}",flush=True)
             completed.append(frame);config['processed_frames']+=1
         write_page(output,completed);config['status']='completed'

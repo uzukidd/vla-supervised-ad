@@ -1,4 +1,4 @@
-"""Read nuScenes mini and project labelled lidar keyframes without the devkit.
+"""Read nuScenes versions and project lidar keyframes without the devkit.
 
 Official taxonomy/index ordering (also asserted by the official lidarseg test):
 https://github.com/nutonomy/nuscenes-devkit/blob/master/python-sdk/nuscenes/utils/color_map.py
@@ -84,17 +84,25 @@ def _transform(points: np.ndarray, pose: dict, inverse: bool = False) -> np.ndar
 
 
 class NuScenesMini:
-    """Index the seven required JSON tables; media files are read on demand."""
+    """Index nuScenes metadata; require ground-truth labels by default."""
 
-    def __init__(self, root: Path, version: str = "v1.0-mini") -> None:
+    def __init__(
+        self, root: Path, version: str = "v1.0-mini", require_lidarseg: bool = True,
+    ) -> None:
+        if version not in ("v1.0-mini", "v1.0-trainval", "v1.0-test"):
+            raise ValueError(f"unsupported nuScenes version {version!r}; use v1.0-mini, v1.0-trainval or v1.0-test")
         self.root = Path(root)
         self.version = version
+        self.require_lidarseg = require_lidarseg
         self._tables: dict[str, dict[str, dict]] = {}
         for name in (
             "scene", "sample", "sample_data", "calibrated_sensor",
             "sensor", "ego_pose", "lidarseg",
         ):
             path = self.root / version / f"{name}.json"
+            if name == "lidarseg" and not require_lidarseg and not path.is_file():
+                self._tables[name] = {}
+                continue
             with path.open(encoding="utf-8") as stream:
                 records = json.load(stream)
             if not isinstance(records, list):
@@ -144,8 +152,8 @@ class NuScenesMini:
 
         An explicit scene list filters the split (intersection). Unknown names
         and unsupported splits fail rather than silently producing no views.
-        Every selected sample must have LIDAR_TOP, its label file and all
-        requested cameras. Missing camera records/images or lidar labels fail.
+        Every selected sample must have LIDAR_TOP and all requested cameras.
+        Label records/files are required only when require_lidarseg is True.
         """
         if split not in ("all", "mini_train", "mini_val"):
             raise ValueError(f"unsupported split {split!r}; use all, mini_train or mini_val")
@@ -177,8 +185,9 @@ class NuScenesMini:
             if "LIDAR_TOP" not in channels:
                 raise ValueError(f"sample {token} ({scene_name}): missing LIDAR_TOP keyframe")
             lidar = channels["LIDAR_TOP"]
-            label = self._get("lidarseg", lidar["token"])
-            self._media_path(label["filename"], f"lidarseg labels for {lidar['token']}")
+            if self.require_lidarseg:
+                label = self._get("lidarseg", lidar["token"])
+                self._media_path(label["filename"], f"lidarseg labels for {lidar['token']}")
             self._media_path(lidar["filename"], f"LIDAR_TOP points for {lidar['token']}")
             for camera in cameras:
                 if camera not in channels:
@@ -195,7 +204,7 @@ class NuScenesMini:
         return views
 
     def load_lidar(self, lidar_token: str) -> dict:
-        """Load the full keyframe in its native LiDAR sensor coordinates."""
+        """Load native LiDAR coordinates; raw_labels is None in optional-label mode."""
         lidar = self._get("sample_data", lidar_token)
         sensor = self._get("sensor", self._get("calibrated_sensor", lidar["calibrated_sensor_token"])["sensor_token"])
         if not lidar["is_key_frame"] or sensor["channel"] != "LIDAR_TOP":
@@ -204,22 +213,25 @@ class NuScenesMini:
         if point_path.stat().st_size % (5 * np.dtype(np.float32).itemsize):
             raise ValueError(f"{point_path}: point file must be float32 Nx5 (20 bytes per point)")
         points = np.fromfile(point_path, dtype=np.float32).reshape(-1, 5)
-        label_path = self._media_path(self._get("lidarseg", lidar_token)["filename"], "lidarseg labels")
-        labels = np.fromfile(label_path, dtype=np.uint8)
-        if len(labels) != len(points):
-            raise ValueError(f"label/point count mismatch: {len(labels)} labels vs {len(points)} points ({label_path})")
-        if np.any(labels > 31):
-            raise ValueError(f"{label_path}: raw labels must be in 0..31")
+        labels = None
+        if self.require_lidarseg:
+            label_path = self._media_path(self._get("lidarseg", lidar_token)["filename"], "lidarseg labels")
+            labels = np.fromfile(label_path, dtype=np.uint8)
+            if len(labels) != len(points):
+                raise ValueError(f"label/point count mismatch: {len(labels)} labels vs {len(points)} points ({label_path})")
+            if np.any(labels > 31):
+                raise ValueError(f"{label_path}: raw labels must be in 0..31")
         if not np.all(np.isfinite(points[:, :3])):
             raise ValueError(f"{point_path}: point coordinates must be finite")
         return {"xyz": points[:, :3], "raw_labels": labels, "intensity": points[:, 3], "ring": points[:, 4]}
 
     def projection(self, view: dict, min_depth: float = 1.0) -> dict:
-        """Project a labelled keyframe and retain the nearest point per floor pixel.
+        """Project a keyframe and retain the nearest point per floor pixel.
 
         Output arrays are aligned and sorted by original lidar point index.
         Counts describe each successive filter; in_image_points is counted
-        before pixel deduplication. Labels, including ignore classes, are kept.
+        before pixel deduplication. Strict mode keeps all labels, including
+        ignore classes; optional-label mode returns raw_labels=None.
         """
         if not np.isfinite(min_depth) or min_depth < 0:
             raise ValueError("min_depth must be finite and nonnegative")
@@ -272,7 +284,7 @@ class NuScenesMini:
             "uv": uv,
             "pixels": pixels,
             "depth": depth[indices],
-            "raw_labels": labels[indices],
+            "raw_labels": None if labels is None else labels[indices],
             "image_size_wh": [width, height],
             "counts": {
                 "total_points": len(points),

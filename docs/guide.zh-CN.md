@@ -6,6 +6,30 @@
 
 阅读顺序：[环境配置](#环境配置) → [可用命令总表](#可用命令总表) → [项目目录与数据路径](#项目目录与数据路径)。后续章节详细说明各数据集、点云输出和评估口径。
 
+## 实例最小矩形框
+
+场景查看器新增默认隐藏的“实例矩形框”图层，3D/BEV Map均支持，随帧/全帧/类别选择，独立于点云和平面开关。每个相机局部instance使用当前清洗后支持点的最小面积旋转矩形，空/点/线退化记录保留；保存角点、尺寸、方向、面积和原始点索引，不当作检测真值或轨迹。新管线自动导出，已有实例结果无需重跑模型即可重建。见 [README实例矩形框](../README.zh-CN.md#每个-instance-的最小矩形-bounding-box)。
+
+## 实例点SOR/DBSCAN清洗
+
+生成器UI可选择none/sor/dbscan/sor_dbscan；CLI使用 `--point-filter`，配合SOR邻域/标准差、DBSCAN半径/核心点数和团块保留策略。按真实相机局部instance处理，原始数组保留，点多边形与点云语义使用保留支持点，IPM不变。旧结果缺少实例点归属需要重新分割。参数、团块保留规则及红绿对比输出见 [README实例清洗](../README.zh-CN.md#instance-支持点清洗sor--dbscan)。下方历史“无离群点处理”描述以当前可选配置为准，默认关闭。
+
+## 本地生成器UI
+
+运行 `bash tasks/nuscenes_sam3/scripts/run_generator.sh`（Windows为同目录run_generator.bat），打开 http://127.0.0.1:8765。页面可编辑类别/提示词、勾选平面与mini场景，预览或启动生成、查看日志/进度、停止运行及打开结果。每次保存独立配置，不修改默认TXT。详细用法见 [README 图形化生成器](../README.zh-CN.md#图形化生成器)。
+
+## 可配置类别与平面选择
+
+最新自定义管线不再固定六类。提示词TXT新增crosswalk或其它名称后自动按行分配ID；用 `--plane-classes sidewalk road crosswalk` 指定其中哪些生成平面，未列入类别保留染色点云。参数贯通run_scenes.sh、run_six_classes.sh和flat_ground，BEV Map与HTML按输出保存的动态类别表和plane_class_ids生成。旧文件名仅作兼容入口，下方“六类/仅road、sidewalk”的历史说明以保存结果的类别表及当前参数为准。完整命令与旧ID保护见 [README 自选平面类别](../README.zh-CN.md#自选平面类别含-crosswalk)。
+
+## BEV Map 栅格地图模式
+
+场景HTML的 **BEV Map** 按钮将两种地面平面分别采样为同一个米制栅格，支持当前帧/全帧投票融合、方法选择、类别隐藏和原始点云XY叠加；未分配格留白。默认0.2米/格，保存标签、每类帧票数、覆盖帧数和冲突；不会把缺证据格变成自由空间。新管线自动包含，已有场景使用 `bash tasks/nuscenes_sam3/scripts/run_bev_map.sh --input-dir <已有场景目录> --output-dir <新目录>` 升级。完整参数/文件说明见 [README BEV Map](../README.zh-CN.md#bev-map将路面分成固定米制格子)。
+
+## 交互式场景时间轴
+
+六类管线现在自动生成每场景一个离线3D HTML，同时提供零水平面IPM、BEV点多边形道路/人行道、原始分类点云、播放/全部帧和图层按钮。完整用法与坐标定义见 [README 场景说明](../README.zh-CN.md#场景-html两种路面染色点云与时间轴)。已有六类输出可执行 `bash tasks/nuscenes_sam3/scripts/run_scenes.sh --input-dir <已有六类输出> --output-dir <新目录>`，不重跑分割。场景HTML是全量数据副本，不依赖CDN；索引标明部分/完整场景。
+
 ## 每个任务只运行一条命令
 
 日常使用只需从下面选择 **一条命令**。入口会自动使用现有WSL `vla-supervised` 环境，完成分割、适用的投影/评估和对比图，不需要手动串联高级脚本。

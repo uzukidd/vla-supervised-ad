@@ -6,6 +6,30 @@ Use local SAM3 for text-prompted segmentation of camera images from Sidewalk Sem
 
 Suggested reading order: [Environment setup](#environment-setup) → [Command reference](#command-reference) → [Project layout and data paths](#project-layout-and-data-paths). The following sections describe each dataset, point-cloud outputs, and evaluation conventions in detail.
 
+## Instance minimum rectangles
+
+The scene viewer adds a default-hidden Instance boxes layer in3D/BEV Map, following frame/all-frame/class selection independently of point and surface layers. Each camera-local instance uses the minimum-area rotated rectangle of retained support XY, preserving empty/point/segment cases. Corners, dimensions, yaw, area and original point indices are saved; boxes are neither detector GT nor track IDs. New exports include them automatically, and saved instance outputs can be re-exported without inference. See [README instance boxes](../README.md#minimum-area-bounding-boxes-per-instance).
+
+## Instance SOR/DBSCAN cleaning
+
+The generator supports none/sor/dbscan/sor_dbscan; CLI uses `--point-filter` plus SOR neighborhood/std, DBSCAN radius/core count and cluster-retention parameters. Actual camera-local instance memberships are filtered, original arrays remain saved, and retained support drives point polygons and colored semantic points while IPM stays unchanged. Older exports lacking instance membership require segmentation regeneration. See [README instance cleaning](../README.md#instance-support-cleaning-sor--dbscan) for parameters, cluster policies and before/after evidence. Historical no-outlier-removal descriptions below defer to this optional configuration; default is off.
+
+## Local generator UI
+
+Run `bash tasks/nuscenes_sam3/scripts/run_generator.sh` (or run_generator.bat on Windows), then open http://127.0.0.1:8765. Edit categories/prompts, choose plane classes and mini scenes, preview/start generation, inspect logs/progress, stop a run and open results. Each run saves an independent configuration without changing the default TXT. See [README graphical generator](../README.md#graphical-generator).
+
+## Configurable classes and plane selection
+
+The custom pipeline is no longer fixed to six categories. Add crosswalk or other names to the prompt TXT; IDs follow non-comment line order. Select surfaces with `--plane-classes sidewalk road crosswalk`; unselected categories remain colored points. The parameter works throughout run_scenes.sh, run_six_classes.sh and flat_ground. BEV Map and HTML use each output's saved dynamic schema and plane_class_ids. Old filenames remain compatibility entries; historical six-class/road-sidewalk-only descriptions below defer to the saved schema and current selection. See [README plane selection](../README.md#choose-plane-classes-including-crosswalk) for commands and old-ID protection.
+
+## BEV Map grid mode
+
+The scene HTML's **BEV Map** button samples each ground-surface method into the same metric grid, supporting current/all-frame vote fusion, method selection, class hiding and original point XY overlays. Unassigned cells stay blank. Default0.2m/cell; labels, per-class frame votes, coverage counts and conflicts are saved without reclassifying unsupported cells as free space. New exports include it automatically; upgrade saved scenes with `bash tasks/nuscenes_sam3/scripts/run_bev_map.sh --input-dir <existing-scenes> --output-dir <new-directory>`. See [README BEV Map](../README.md#bev-map-divide-ground-surfaces-into-metric-cells) for options and files.
+
+## Interactive scene timelines
+
+The six-class pipeline now exports one standalone3D HTML per scene, with zero-plane IPM and BEV point-polygon road/sidewalk surfaces, original colored semantic points, playback/all-frame mode and layer buttons. See the [README scene section](../README.md#scene-html-two-road-surfaces-colored-points-and-a-timeline) for usage and coordinate definitions. Reuse saved six-class results with `bash tasks/nuscenes_sam3/scripts/run_scenes.sh --input-dir <saved-six-class-output> --output-dir <new-directory>` without new segmentation. Scene HTML embeds the complete data without a CDN; the index distinguishes partial and complete scenes.
+
 ## One command per task
 
 For normal use, pick **one command below**. Each entry point automatically selects the existing WSL `vla-supervised` environment and finishes segmentation, applicable projection/evaluation, and comparison images. You do not need to run the advanced stages separately.

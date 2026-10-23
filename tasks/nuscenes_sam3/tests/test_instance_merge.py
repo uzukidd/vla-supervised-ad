@@ -6,7 +6,9 @@ import json
 import math
 import unittest
 
-from tasks.nuscenes_sam3.python.instance_merge import merge_instances_by_points
+from tasks.nuscenes_sam3.python.instance_merge import (
+    merge_instances_by_points, merge_instance_support,
+)
 
 
 def instance(identifier=1, indices=(), camera="CAM_FRONT", class_id=4, score=.8):
@@ -268,6 +270,150 @@ class ValidationTests(unittest.TestCase):
                     instance(2, range(3), "CAM_B", class_id)])
                 self.assertEqual(len(result["pairs"]), int(class_id <= 10))
                 self.assertEqual(len(result["groups"]), 1 if class_id <= 10 else 2)
+
+
+class DynamicSupportMergeTests(unittest.TestCase):
+    def test_explicit_selection_accepts_dynamic_ids_and_leaves_other_classes(self):
+        records = [instance(1, range(3), "CAM_A", 254),
+                   instance(2, range(3), "CAM_B", 254),
+                   instance(3, range(3), "CAM_C", 4),
+                   instance(4, range(3), "CAM_D", 4)]
+        result = merge_instances_by_points(records, eligible_class_ids=[254])
+        self.assertEqual(result["mapping"], {1: 1, 2: 1, 3: 3, 4: 4})
+        self.assertEqual(result["metadata"]["foreground_class_ids"], [254])
+        self.assertEqual(len(merge_instances_by_points(records, eligible_class_ids=[])["groups"]), 4)
+        with self.assertRaises(ValueError):
+            merge_instances_by_points(records)
+
+    def test_cleaned_union_provenance_representative_and_no_aliases(self):
+        records = [instance(8, [1, 2, 3, 3, 4], "CAM_A", 42, .4),
+                   instance(2, [1, 2, 3, 5], "CAM_B", 42, .9)]
+        for index, record in enumerate(records):
+            record.update(camera_instance_id=index + 10,
+                          original_point_indices=[1, 2, 3, 4, 5, 99],
+                          filter={"kept": {"count": 4}, "removed": [99]})
+        before = copy.deepcopy(records)
+        result = merge_instance_support(records)
+        self.assertEqual(records, before)
+        self.assertEqual(result["mapping"], {2: 2, 8: 2})
+        merged = result["instances"][0]
+        self.assertEqual(merged["global_instance_id"], 2)
+        self.assertEqual(merged["camera"], "CAM_B")
+        self.assertEqual(merged["camera_instance_id"], 11)
+        self.assertEqual(merged["member_instance_ids"], [2, 8])
+        self.assertEqual(merged["source_cameras"], ["CAM_A", "CAM_B"])
+        self.assertEqual(merged["score"], .9)
+        self.assertEqual(merged["point_indices"], [1, 2, 3, 4, 5])
+        self.assertEqual(merged["source_instances"], [before[1], before[0]])
+        self.assertNotIn("filter", merged)
+        self.assertNotIn("original_point_indices", merged)
+        self.assertEqual(merged["source_point_observations"], 8)
+        self.assertEqual(merged["deduplicated_shared_observations"], 3)
+        merged["source_instances"][0]["filter"]["kept"]["count"] = -1
+        merged["point_indices"].append(77)
+        self.assertEqual(records, before)
+        self.assertEqual(result["groups"][0]["point_indices"], [1, 2, 3, 4, 5])
+
+    def test_surfaces_explicitly_excluded_regardless_of_numeric_order(self):
+        records = [instance(1, range(3), "CAM_A", 2),
+                   instance(2, range(3), "CAM_B", 2),
+                   instance(3, range(3), "CAM_A", 200),
+                   instance(4, range(3), "CAM_B", 200)]
+        result = merge_instance_support(records, surface_class_ids=[2])
+        self.assertEqual(result["mapping"], {1: 1, 2: 2, 3: 3, 4: 3})
+        self.assertEqual(result["metadata"]["foreground_class_ids"], [200])
+        self.assertEqual(result["metadata"]["surface_class_ids"], [2])
+        self.assertEqual([item["member_count"] for item in result["instances"]], [1, 1, 2])
+
+    def test_rejected_threshold_disjoint_class_and_same_camera(self):
+        anchor = instance(1, range(10), "CAM_A", 42)
+        cases = [
+            (instance(2, range(8, 18), "CAM_B", 42), {}, "rejected_threshold"),
+            (instance(2, range(7, 17), "CAM_B", 42), {"min_overlap": .31}, "rejected_threshold"),
+            (instance(2, range(7, 17), "CAM_B", 42), {"min_shared_points": 4}, "rejected_threshold"),
+            (instance(2, range(20, 30), "CAM_B", 42), {}, "rejected_threshold"),
+            (instance(2, range(10), "CAM_A", 42), {}, None),
+            (instance(2, range(10), "CAM_B", 43), {}, None),
+        ]
+        for other, kwargs, decision in cases:
+            with self.subTest(other=other, kwargs=kwargs):
+                result = merge_instance_support([anchor, other], **kwargs)
+                self.assertEqual(result["mapping"], {1: 1, 2: 2})
+                self.assertEqual([pair["decision"] for pair in result["pairs"]],
+                                 [] if decision is None else [decision])
+
+    def test_original_support_cannot_create_merge_evidence(self):
+        records = [instance(1, [0, 1], "CAM_A", 99),
+                   instance(2, [2, 3], "CAM_B", 99)]
+        for record in records:
+            record["original_point_indices"] = list(range(10))
+        result = merge_instance_support(records)
+        self.assertEqual(result["pairs"][0]["shared_points"], 0)
+        self.assertEqual([row["point_indices"] for row in result["instances"]], [[0, 1], [2, 3]])
+
+    def test_complete_link_and_camera_conflict_remain_conservative(self):
+        for third_camera, third_points, expected in (
+                ("CAM_C", range(3, 6), "rejected_group_consistency"),
+                ("CAM_A", range(3), "rejected_camera_conflict")):
+            with self.subTest(third_camera=third_camera):
+                result = merge_instance_support([
+                    instance(1, range(3), "CAM_A", 42),
+                    instance(2, range(6), "CAM_B", 42),
+                    instance(3, third_points, third_camera, 42)])
+                self.assertEqual(result["mapping"], {1: 1, 2: 1, 3: 3})
+                self.assertIn(expected, [pair["decision"] for pair in result["pairs"]])
+
+    def test_legacy_defaults_and_explicit_ids_are_preserved(self):
+        records = [{"camera": "CAM_A", "class_id": 25, "point_indices": [0, 1, 2]},
+                   {"global_instance_id": 1, "camera": "CAM_B", "class_id": 25,
+                    "point_indices": [0, 1, 2]}]
+        before = copy.deepcopy(records)
+        result = merge_instance_support(records)
+        merged = result["instances"][0]
+        self.assertEqual(merged["member_instance_ids"], [1, 2])
+        self.assertEqual(merged["global_instance_id"], 1)
+        self.assertEqual(merged["camera"], "CAM_B")
+        self.assertEqual(merged["class_name"], "25")
+        self.assertEqual(merged["score"], 0.)
+        self.assertEqual(records, before)
+        self.assertEqual(merge_instance_support([])["instances"], [])
+
+    def test_merged_support_is_accepted_by_instance_boxes(self):
+        import numpy as np
+        from tasks.nuscenes_sam3.python.instance_boxes import build_instance_boxes
+
+        xyz = np.array([[0., 0., 0.], [1., 0., 1.], [0., 1., 2.], [1., 1., 3.]])
+        result = merge_instance_support([
+            instance(9, [0, 1, 2], "CAM_A", 254),
+            instance(4, [0, 1, 2, 3], "CAM_B", 254),
+            instance(7, [0, 1, 2], "CAM_C", 2)], surface_class_ids=[2])
+        boxes = build_instance_boxes(xyz, result["instances"], surface_class_ids=[2])["boxes"]
+        self.assertEqual(len(boxes), 1)
+        self.assertEqual(boxes[0]["global_instance_id"], 4)
+        self.assertEqual(boxes[0]["camera"], "CAM_B")
+        self.assertEqual(boxes[0]["class_id"], 254)
+        self.assertEqual(boxes[0]["point_indices"], [0, 1, 2, 3])
+        self.assertEqual(boxes[0]["support_count"], 4)
+
+    def test_invalid_original_ids_and_dynamic_class_selections_raise(self):
+        for key, values in {
+                "global_instance_id": [0, -1, True, 1., "1", None],
+                "class_id": [0, 255, -1, True, 42., "42", None],
+                "point_indices": [[-1], [True], [1.], ["1"]],
+        }.items():
+            for value in values:
+                record = instance(class_id=42)
+                record[key] = value
+                with self.subTest(key=key, value=value), self.assertRaises((TypeError, ValueError)):
+                    merge_instance_support([record])
+        with self.assertRaises(ValueError):
+            merge_instance_support([instance(), instance()])
+        for values in ([0], [255], [True], [1.], ["42"], "42", 42, None):
+            with self.subTest(values=values), self.assertRaises((TypeError, ValueError)):
+                merge_instance_support([], surface_class_ids=values)
+            if values is not None:
+                with self.subTest(values=values), self.assertRaises((TypeError, ValueError)):
+                    merge_instances_by_points([], eligible_class_ids=values)
 
 
 if __name__ == "__main__":

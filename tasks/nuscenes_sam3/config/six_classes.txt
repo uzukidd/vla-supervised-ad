@@ -1,7 +1,10 @@
-# Six output classes. Keep left-hand names and order unchanged.
+# Configurable output classes; IDs follow the current non-comment line order.
+# Use --plane-classes sidewalk road crosswalk to choose plane categories.
+# Saved results retain their own classes.json; changing this file does not relabel old masks.
 # Edit English SAM3 prompts on the right; | separates alternatives.
 sidewalk = sidewalk
 road = road
+crosswalk = crosswalk
 pedestrian = person on foot | pedestrian
 vehicle = car | truck | bus | trailer
 bike = bicycle | motorcycle

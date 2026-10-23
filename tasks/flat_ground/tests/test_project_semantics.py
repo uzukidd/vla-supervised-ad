@@ -48,6 +48,24 @@ class FlatGroundTaskTests(unittest.TestCase):
             np.testing.assert_allclose(cameras[0]['camera_to_global'][:3,3],[100,200,1.5])
             self.assertFalse((meta/'lidarseg.json').exists())
             self.assertFalse((root/'samples/LIDAR_TOP').exists())
+            self.assertEqual(dataset.version,'v1.0-mini')
+            for version in ('v1.0-trainval','v1.0-test'):
+                with self.subTest(version=version):
+                    version_meta=root/version;version_meta.mkdir()
+                    tables['scene'][0]['name']='scene-0001'
+                    for name,rows in tables.items():(version_meta/f'{name}.json').write_text(json.dumps(rows))
+                    dataset=CameraFrames(root,version=version)
+                    self.assertEqual(dataset.version,version)
+                    self.assertEqual(dataset.frames('all'),[{'sample_token':'sample','timestamp':10,'scene_name':'scene-0001'}])
+                    self.assertEqual(len(dataset.cameras('sample')),6)
+                    self.assertFalse((version_meta/'lidarseg.json').exists())
+                    for split in ('mini_train','mini_val'):
+                        with self.assertRaisesRegex(ValueError,'requires version v1.0-mini'):dataset.frames(split)
+                    with self.assertRaisesRegex(ValueError,'Unsupported split'):dataset.frames('train')
+                    with self.assertRaisesRegex(ValueError,'Unknown scene name'):dataset.frames('all',['scene-9999'])
+            for version in ('v1.0','trainval','../v1.0-mini',''):
+                with self.subTest(version=version),self.assertRaisesRegex(ValueError,'Unsupported nuScenes version'):
+                    CameraFrames(root,version=version)
 
     def test_six_camera_projection_saves_numeric_evidence_and_reusable_masks(self):
         with tempfile.TemporaryDirectory() as directory:

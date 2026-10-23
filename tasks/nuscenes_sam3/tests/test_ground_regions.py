@@ -73,6 +73,96 @@ class GroundRegionTests(unittest.TestCase):
         self.assertEqual(int(result['point_count'].sum()),5)
         self.assertEqual(result['metadata']['filled_ground_cells'],result['metadata']['observed_ground_cells']+result['metadata']['inferred_cells'])
 
+    def test_custom_crosswalk_ground_and_pedestrian_veto(self):
+        xyz = np.array([[0, 0, 0], [2, 0, 0], [0, 2, 0], [2, 2, 0],
+                        [1, 1, 0], [.8, .8, 0], [1.4, 1.4, 0]], dtype=float)
+        labels = np.array([3, 3, 3, 3, 4, 1, 0], dtype=np.uint8)
+        result = ground_planes(xyz, labels, resolution=.2, roi_size=10, max_edge=3,
+                               ground_ids=[3, 1, 2], num_classes=7)
+        self.assertEqual(result['metadata']['ground_class_ids'], [1, 2, 3])
+        self.assertGreater(int((result['filled'] == 3).sum()), 4)
+        self.assertTrue((result['filled'][result['observed'] == 1] == 1).all())
+        self.assertTrue(result['blocked'][19, 30])  # Pedestrian at (1, 1).
+        self.assertEqual(int(result['filled'][19, 30]), 0)
+        unknown_col, unknown_y = np.floor((xyz[-1, :2] + 5) / .2).astype(int)
+        unknown_row = 49 - unknown_y
+        self.assertFalse(result['blocked'][unknown_row, unknown_col])
+        self.assertEqual(int(result['filled'][unknown_row, unknown_col]), 3)
+        excluded = ground_planes(xyz, labels, resolution=.2, roi_size=10, max_edge=3,
+                                 ground_ids=[1, 2], num_classes=7)
+        self.assertNotIn(3, np.unique(excluded['filled']))
+        self.assertTrue(excluded['blocked'][result['observed'] == 3].all())
+        self.assertEqual([row['class_id'] for row in excluded['triangles']], [1, 2])
+
+    def test_noncontiguous_ground_ids_preserved_and_order_independent(self):
+        square = np.array([[0, 0, 0], [2, 0, 0], [0, 2, 0], [2, 2, 0]], dtype=float)
+        xyz = np.concatenate((square, square + [-3, -3, 0], [[0, 0, 0]]))
+        labels = np.array([8, 8, 8, 8, 2, 2, 2, 2, 2], dtype=np.uint8)
+        result = ground_planes(xyz, labels, resolution=.2, roi_size=10, max_edge=3,
+                               ground_ids=[8, 2], num_classes=10)
+        reversed_result = ground_planes(xyz, labels, resolution=.2, roi_size=10, max_edge=3,
+                                        ground_ids=[2, 8], num_classes=10)
+        self.assertEqual(result['metadata']['ground_class_ids'], [2, 8])
+        self.assertEqual(int(result['observed'][24, 25]), 2)  # Equal cell votes.
+        self.assertEqual(set(np.unique(result['filled'])), {0, 2, 8})
+        self.assertEqual([row['class_id'] for row in result['triangles']], [2, 8])
+        self.assertEqual({row['class_id'] for row in result['contours']}, {2, 8})
+        self.assertTrue(all(row['accepted_triangles'] > 0 for row in result['triangles']))
+        for key in ('observed', 'filled', 'inferred', 'blocked'):
+            np.testing.assert_array_equal(result[key], reversed_result[key])
+        self.assertEqual(result['triangles'], reversed_result['triangles'])
+        self.assertEqual(result['contours'], reversed_result['contours'])
+
+    def test_custom_ground_overlap_prefers_nearest_then_lowest_id(self):
+        # Both triangles contain the origin, equidistant from their closest supports.
+        xyz = np.array([[-2, -2, 0], [2, -2, 0], [0, 2, 0],
+                        [-2, 2, 0], [2, 2, 0], [0, -2, 0]], dtype=float)
+        labels = np.array([8, 8, 8, 2, 2, 2], dtype=np.uint8)
+        result = ground_planes(xyz, labels, resolution=1, roi_size=10, max_edge=6,
+                               ground_ids=[8, 2], num_classes=10)
+        self.assertTrue(result['inferred'][4, 5])
+        self.assertEqual(int(result['filled'][4, 5]), 2)
+        # Just above the origin the nearest observed support belongs to class 8.
+        self.assertTrue(result['inferred'][3, 5])
+        self.assertEqual(int(result['filled'][3, 5]), 8)
+
+    def test_class_count_uint8_boundaries_and_all_assigned_ground(self):
+        xyz = np.array([[0., 0., 0.], [1., 0., 0.]])
+        for num_classes, cid in ((254, 253), (255, 254)):
+            with self.subTest(num_classes=num_classes):
+                result = ground_planes(xyz, np.array([cid, 0], dtype=np.uint8),
+                                       resolution=1, roi_size=4, ground_ids=[cid], num_classes=num_classes)
+                self.assertEqual(result['metadata']['ground_class_ids'], [cid])
+                self.assertIn(cid, np.unique(result['filled']))
+                self.assertFalse(result['blocked'].any())
+        result = ground_planes(xyz, np.array([1, 0], dtype=np.uint8),
+                               resolution=1, roi_size=4, ground_ids=[1], num_classes=2)
+        self.assertFalse(result['blocked'].any())
+        invalid_labels = (np.array([254, 0], dtype=np.uint8), np.array([255, 0], dtype=np.uint8),
+                          np.array([1, 0], dtype=np.int64), np.array([1., 0.]),
+                          np.array([1], dtype=np.uint8), np.array([[1, 0]], dtype=np.uint8))
+        for labels in invalid_labels:
+            with self.subTest(labels=labels), self.assertRaises(ValueError):
+                ground_planes(xyz, labels, resolution=1, roi_size=4, ground_ids=[1], num_classes=254)
+        with self.assertRaises(ValueError):
+            ground_planes(xyz, np.array([255, 0], dtype=np.uint8), ground_ids=[254], num_classes=255)
+
+    def test_invalid_class_configuration_and_nonfinite_points(self):
+        xyz = np.array([[0., 0., 0.]])
+        labels = np.array([1], dtype=np.uint8)
+        for ground_ids in (None, [], [1, 1], [0], [-1], [7], [1.0], [True], '1', 1, [[1]]):
+            with self.subTest(ground_ids=ground_ids), self.assertRaises(ValueError):
+                ground_planes(xyz, labels, ground_ids=ground_ids, num_classes=7)
+        for num_classes in (None, 0, 1, -1, 256, 7., True, '7'):
+            with self.subTest(num_classes=num_classes), self.assertRaises(ValueError):
+                ground_planes(xyz, labels, ground_ids=[1], num_classes=num_classes)
+        for value in (float('nan'), float('inf')):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                ground_planes(np.array([[value, 0., 0.]]), labels, ground_ids=[1], num_classes=7)
+        result = ground_planes(xyz, labels, resolution=1, roi_size=4,
+                               ground_ids=np.array([1], dtype=np.int64), num_classes=np.int64(7))
+        self.assertEqual(result['metadata']['ground_class_ids'], [1])
+
     def test_invalid_parameters(self):
         xyz=np.array([[0,0,0]],dtype=float); labels=np.array([11],dtype=np.uint8)
         for kwargs in ({'max_edge':0},{'resolution':0},{'roi_size':0},{'roi_size':1,'resolution':.3}):

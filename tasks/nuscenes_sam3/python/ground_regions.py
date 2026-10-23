@@ -38,10 +38,32 @@ def fuse_semantic_points(point_count: int, instances: list[dict]) -> tuple[np.nd
 
 
 def ground_planes(xyz: np.ndarray, labels: np.ndarray, resolution: float = .2, roi_size: float = 100.,
-                  max_edge: float = 6.) -> dict:
-    """Fill local Delaunay triangles; never bridge edges longer than max_edge."""
-    if xyz.ndim != 2 or xyz.shape[1] != 3 or labels.shape != (len(xyz),) or labels.dtype != np.uint8 or np.any(labels > 16) or not np.isfinite(xyz).all():
-        raise ValueError('Expected finite Nx3 xyz and aligned uint8 semantic labels')
+                  max_edge: float = 6., *, ground_ids=GROUND_IDS, num_classes: int = 17) -> dict:
+    """Fill bounded per-class triangles from finite Nx3 points and aligned uint8 labels.
+
+    Labels must be below ``num_classes`` (including unassigned 0, at most 255).
+    ``ground_ids`` must contain unique integer IDs in 1..num_classes-1. IDs are
+    preserved and sorted so equal votes and nearest-support distances prefer the
+    lowest ID. Other assigned classes veto filling; unassigned 0 does not.
+    Defaults retain the existing coarse16 ground classes and behavior.
+    """
+    if (isinstance(num_classes, (bool, np.bool_)) or not isinstance(num_classes, (int, np.integer))
+            or not 2 <= num_classes <= 255):
+        raise ValueError('num_classes must be an integer in [2, 255], including unassigned 0')
+    num_classes = int(num_classes)
+    try:
+        ground_ids = tuple(ground_ids)
+    except TypeError as error:
+        raise ValueError('ground_ids must contain unique integer IDs in 1..num_classes-1') from error
+    if (not ground_ids or any(isinstance(cid, (bool, np.bool_)) or not isinstance(cid, (int, np.integer))
+                              or not 1 <= cid < num_classes for cid in ground_ids)
+            or len(set(ground_ids)) != len(ground_ids)):
+        raise ValueError('ground_ids must contain unique integer IDs in 1..num_classes-1')
+    ground_ids = tuple(sorted(int(cid) for cid in ground_ids))
+    if (not isinstance(xyz, np.ndarray) or not isinstance(labels, np.ndarray)
+            or xyz.ndim != 2 or xyz.shape[1] != 3 or labels.shape != (len(xyz),)
+            or labels.dtype != np.uint8 or np.any(labels >= num_classes) or not np.isfinite(xyz).all()):
+        raise ValueError('Expected finite Nx3 xyz and aligned uint8 semantic labels below num_classes')
     if not all(np.isfinite(x) and x > 0 for x in (resolution, roi_size, max_edge)):
         raise ValueError('Resolution, ROI and maximum edge must be finite and positive')
     n = round(roi_size / resolution)
@@ -55,17 +77,17 @@ def ground_planes(xyz: np.ndarray, labels: np.ndarray, resolution: float = .2, r
     cols, rows = xy[:, 0], n-1-xy[:, 1]
     flat = rows*n+cols
     observed = np.zeros((n,n), dtype=np.uint8)
-    votes = np.zeros((17,n,n), dtype=np.uint32)
-    for cid in range(1,17):
+    votes = np.zeros((num_classes,n,n), dtype=np.uint32)
+    for cid in range(1,num_classes):
         votes[cid] = np.bincount(flat[values==cid], minlength=n*n).reshape(n,n)
-    ground_support = np.stack([votes[cid] for cid in GROUND_IDS])
+    ground_support = np.stack([votes[cid] for cid in ground_ids])
     support_count = ground_support.sum(0)
-    observed[support_count > 0] = np.asarray(GROUND_IDS)[ground_support.argmax(0)[support_count > 0]]
-    blocked = votes[[cid for cid in range(1,17) if cid not in GROUND_IDS]].sum(0) > 0
+    observed[support_count > 0] = np.asarray(ground_ids)[ground_support.argmax(0)[support_count > 0]]
+    blocked = votes[[cid for cid in range(1,num_classes) if cid not in ground_ids]].sum(0) > 0
     # Ground labels at occupied cells are preserved; other semantic evidence is a veto.
     observed[blocked] = 0
     candidate_masks, distance_maps, triangle_records = [], [], []
-    for cid in GROUND_IDS:
+    for cid in ground_ids:
         support = (observed == cid)
         pixel_points = np.column_stack(np.nonzero(support)[::-1]).astype(np.float32)
         candidate = support.astype(np.uint8)
@@ -95,7 +117,7 @@ def ground_planes(xyz: np.ndarray, labels: np.ndarray, resolution: float = .2, r
         triangle_records.append({'class_id':cid,'support_cells':int(support.sum()),'accepted_triangles':len(accepted),'triangles_pixel_xy':accepted})
     filled = np.zeros_like(observed)
     nearest = np.full((n,n),np.inf,dtype=np.float32)
-    for cid, mask, distance in zip(GROUND_IDS,candidate_masks,distance_maps):
+    for cid, mask, distance in zip(ground_ids,candidate_masks,distance_maps):
         update = mask & (distance < nearest)
         filled[update] = cid
         nearest[update] = distance[update]
@@ -103,7 +125,7 @@ def ground_planes(xyz: np.ndarray, labels: np.ndarray, resolution: float = .2, r
     filled[blocked] = 0
     inferred = (filled != 0) & (observed == 0)
     contours = []
-    for cid in GROUND_IDS:
+    for cid in ground_ids:
         loops, hierarchy = cv2.findContours((filled==cid).astype(np.uint8),cv2.RETR_CCOMP,cv2.CHAIN_APPROX_SIMPLE)
         for i, contour in enumerate(loops):
             pixel_xy = contour[:,0,:]
@@ -118,7 +140,7 @@ def ground_planes(xyz: np.ndarray, labels: np.ndarray, resolution: float = .2, r
                         'max_triangle_edge_m':max_edge,'roi_points':int(inside.sum()),
                         'observed_ground_cells':int((observed!=0).sum()),'filled_ground_cells':int((filled!=0).sum()),
                         'inferred_cells':int(inferred.sum()),'blocked_cells':int(blocked.sum()),
-                        'ground_class_ids':list(GROUND_IDS),
+                        'ground_class_ids':list(ground_ids),
                         'method':'per-class Delaunay triangles on observed cell centers, bounded edge length; nearest support resolves inferred overlaps',
                         'limitations':'Filled cells are inferred, not measured. No guaranteed road surface, grade/height estimation or motion reasoning. '
                                       'Disconnected distant supports remain separate; existing non-ground semantic cells veto fill. '

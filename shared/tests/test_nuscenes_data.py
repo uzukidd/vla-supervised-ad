@@ -113,15 +113,72 @@ class NuScenesDataTests(unittest.TestCase):
     def write_uv_depth(self, entries, labels=None):
         self.write_points([[(u - 5) * z / 2, (v - 4) * z / 2, z] for u, v, z in entries], labels)
 
-    def load(self):
+    def load(self, version="v1.0-mini", require_lidarseg=True):
+        metadata = self.root / version
+        metadata.mkdir(exist_ok=True)
         for table, records in self.tables.items():
-            (self.root / "v1.0-mini" / f"{table}.json").write_text(json.dumps(records), encoding="utf-8")
-        return NuScenesMini(self.root)
+            (metadata / f"{table}.json").write_text(json.dumps(records), encoding="utf-8")
+        return NuScenesMini(self.root, version=version, require_lidarseg=require_lidarseg)
 
     def project(self, min_depth=1.0):
         nusc = self.load()
         view = nusc.select_views(["CAM_FRONT"])[0]
         return nusc.projection(view, min_depth=min_depth)
+
+    def test_nonmini_without_lidarseg_loads_media_and_projects_geometry(self):
+        self.tables.pop("lidarseg")
+        self.tables["scene"][0]["name"] = "scene-0001"
+        for version in ("v1.0-trainval", "v1.0-test"):
+            with self.subTest(version=version):
+                nusc = self.load(version, require_lidarseg=False)
+                self.assertEqual(nusc.version, version)
+                self.assertFalse(nusc.require_lidarseg)
+                self.assertFalse((self.root / version / "lidarseg.json").exists())
+                views = nusc.select_views(["CAM_FRONT", "CAM_FRONT_LEFT"], split="all")
+                self.assertEqual([view["camera"] for view in views], ["CAM_FRONT", "CAM_FRONT_LEFT"])
+                cloud = nusc.load_lidar("lidar")
+                np.testing.assert_array_equal(cloud["xyz"], [[0, 0, 2], [1, 1, 2]])
+                self.assertIsNone(cloud["raw_labels"])
+                self.assertEqual(cloud["intensity"].shape, (2,))
+                self.assertEqual(cloud["ring"].shape, (2,))
+                result = nusc.projection(views[0])
+                self.assertIsNone(result["raw_labels"])
+                np.testing.assert_array_equal(result["point_indices"], [0, 1])
+                np.testing.assert_allclose(result["uv"], [[5, 4], [6, 5]])
+                self.assertEqual(result["counts"]["retained_points"], 2)
+                for split in ("mini_train", "mini_val"):
+                    with self.assertRaisesRegex(ValueError, "requires version v1.0-mini"):
+                        nusc.select_views(["CAM_FRONT"], split=split)
+                with self.assertRaisesRegex(ValueError, "unsupported split"):
+                    nusc.select_views(["CAM_FRONT"], split="train")
+
+    def test_optional_lidarseg_does_not_require_existing_table_label_files(self):
+        self.tables["lidarseg"][0]["filename"] = "lidarseg/missing.bin"
+        nusc = self.load(require_lidarseg=False)
+        view = nusc.select_views(["CAM_FRONT"])[0]
+        self.assertIsNone(nusc.load_lidar("lidar")["raw_labels"])
+        self.assertIsNone(nusc.projection(view)["raw_labels"])
+        self.write_points([])
+        result = nusc.projection(view)
+        self.assertEqual(result["uv"].shape, (0, 2))
+        self.assertIsNone(result["raw_labels"])
+
+    def test_strict_default_requires_lidarseg_table_and_label_files(self):
+        self.tables.pop("lidarseg")
+        with self.assertRaisesRegex(FileNotFoundError, "lidarseg.json"):
+            self.load()
+        self.tables["lidarseg"] = [{"sample_data_token": "lidar", "filename": "lidarseg/missing.bin"}]
+        nusc = self.load()
+        self.assertTrue(nusc.require_lidarseg)
+        with self.assertRaisesRegex(FileNotFoundError, "lidarseg labels"):
+            nusc.select_views(["CAM_FRONT"])
+        with self.assertRaisesRegex(FileNotFoundError, "lidarseg labels"):
+            nusc.load_lidar("lidar")
+
+    def test_invalid_versions_fail_before_reading_metadata(self):
+        for version in ("v1.0", "trainval", "../v1.0-mini", ""):
+            with self.subTest(version=version), self.assertRaisesRegex(ValueError, "unsupported nuScenes version"):
+                NuScenesMini(self.root, version=version, require_lidarseg=False)
 
     def test_official_taxonomy_and_merge(self):
         self.assertIsInstance(CAMERAS, tuple)

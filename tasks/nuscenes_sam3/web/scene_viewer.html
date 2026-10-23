@@ -1,0 +1,510 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>nuScenes 场景浏览器 · Scene Viewer</title>
+<style>
+:root{color-scheme:light;--ink:#183044;--muted:#667b8d;--line:#dce5eb;--accent:#146f9b}*{box-sizing:border-box}body{margin:0;font:14px/1.45 system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;color:var(--ink);background:#edf2f5}header{height:74px;background:#fff;border-bottom:1px solid var(--line);padding:12px 22px;display:flex;align-items:center;justify-content:space-between;gap:16px}h1{font-size:19px;margin:0 0 3px;font-weight:750}header small,.muted{color:var(--muted);font-size:12px}.badge{background:#e8f4fa;color:#146f9b;border:1px solid #c9e1ed;padding:5px 10px;border-radius:20px;font-size:12px;white-space:nowrap}main{height:calc(100vh - 74px);display:flex}aside{width:286px;flex-shrink:0;background:#fff;padding:17px 18px;overflow:auto;border-right:1px solid var(--line)}section{margin:0 0 19px}h2{font-size:13px;margin:0 0 10px;letter-spacing:.02em}label.check{display:flex;align-items:center;gap:8px;min-height:31px;cursor:pointer}input[type=checkbox]{accent-color:var(--accent);width:16px;height:16px;margin:0;flex-shrink:0}.swatch{width:12px;height:12px;border-radius:3px;flex-shrink:0}.class-text{font-size:12px}.method-note{margin:6px 0 0 24px;color:var(--muted);font-size:11px}button,select{border:1px solid #cbd8e1;background:white;border-radius:6px;color:var(--ink);padding:7px 10px;font:inherit;cursor:pointer}button:hover{background:#edf6fb;border-color:#8eb8cd}button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid #228ec5;outline-offset:2px}button.active{background:#146f9b;color:#fff;border-color:#146f9b}.small-buttons{display:flex;gap:6px;margin:8px 0}.small-buttons button{font-size:11px;padding:5px 9px}.slider-label{display:flex;justify-content:space-between;font-size:12px;margin-top:12px}input[type=range]{width:100%;accent-color:var(--accent)}#stage{flex:1;min-width:0;position:relative;overflow:hidden}canvas{display:block;width:100%;height:100%;touch-action:none;cursor:grab}canvas:active{cursor:grabbing}.toolbar{position:absolute;left:18px;top:16px;display:flex;gap:7px}.toolbar button{box-shadow:0 2px 8px #1830440d;font-size:12px}.legend{position:absolute;right:18px;top:17px;background:#ffffffed;border:1px solid var(--line);border-radius:8px;padding:10px 13px;max-width:390px;font-size:12px;pointer-events:none}#stats{font-variant-numeric:tabular-nums;line-height:1.8;font-size:12px;white-space:pre-line}#frameInfo{color:var(--muted);font-size:11px;max-width:340px;overflow-wrap:anywhere}.timeline{position:absolute;bottom:18px;left:18px;right:18px;background:#fffffff2;border:1px solid var(--line);border-radius:10px;padding:12px 14px;box-shadow:0 4px 20px #1830440c}.timeline-top{display:flex;align-items:center;gap:8px}.timeline-top button{padding:5px 10px}.timeline-top label{display:flex;align-items:center;gap:6px;white-space:nowrap;font-size:12px}.timeline-top select{padding:4px;font-size:12px}.timeline-top .spacer{flex:1}.timeline-top strong{font-size:12px;font-variant-numeric:tabular-nums}.hint{position:absolute;bottom:127px;left:20px;color:#657d8d;font-size:11px;pointer-events:none}.warning{margin-top:6px;color:#9a6418;font-size:11px}#error{position:absolute;inset:20%;z-index:10;padding:25px;background:#fff2f1;border:2px solid #c9473b;border-radius:10px;color:#92261e;white-space:pre-wrap;overflow:auto}#limitations{font-size:11px;color:var(--muted);white-space:pre-wrap;overflow-wrap:anywhere}.footer-note{font-size:11px;color:var(--muted)}@media(max-width:820px){aside{width:224px;padding:12px}.legend{top:60px;right:10px;max-width:260px}.toolbar{left:10px;top:10px}.timeline{left:10px;right:10px}.timeline-top{gap:5px;flex-wrap:wrap}header{padding:10px 14px}.badge{display:none}h1{font-size:16px}}@media(max-width:560px){aside{width:180px;padding:10px}.class-text{font-size:10px}.legend{font-size:10px;padding:7px;max-width:210px}.hint{display:none}.toolbar button{padding:5px;font-size:10px}.timeline{padding:8px}.timeline-top label{font-size:10px}}
+#bevMapCanvas{position:absolute;inset:0}canvas[hidden],[hidden]{display:none!important}.map-options{display:flex;align-items:center;gap:9px;margin:8px 0;font-size:12px}.map-options select{padding:4px 7px}.toolbar{flex-wrap:wrap;max-width:calc(100% - 32px)}.toolbar button{font-size:12px}.map-mode #topView,.map-mode #orbitView{display:none}.map-mode .hint{max-width:calc(100% - 40px)}
+.camera-panel{position:absolute;top:16px;right:16px;width:min(450px,44%);padding:10px;border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.95);box-shadow:0 3px 16px #18304418;z-index:2}.camera-panel summary{cursor:pointer;font-size:12px;font-weight:650}.camera-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-top:8px}.camera-tile{padding:0;overflow:hidden;min-width:0;text-align:center;background:#142431;color:white;border-color:#334957}.camera-tile:hover{background:#203d50}.camera-tile img{display:block;width:100%;aspect-ratio:16/9;object-fit:contain;background:#10202c}.camera-tile span{display:block;padding:3px 1px;font-size:10px}.camera-tile:disabled{cursor:default;opacity:.6}.camera-empty{aspect-ratio:16/9;display:grid;place-items:center;font-size:11px}.camera-panel~.legend{top:auto;bottom:150px;pointer-events:none}.camera-dialog{padding:14px;border:1px solid #536b7d;border-radius:12px;width:min(1400px,96vw);max-width:96vw;max-height:94vh;background:#142431;color:white}.camera-dialog::backdrop{background:#07111bd9}.camera-dialog header{height:auto;background:transparent;border:0;padding:0 0 12px;color:white}.camera-dialog h2{margin:0;font-size:15px}.camera-dialog button{flex-shrink:0}.camera-dialog img{display:block;width:100%;max-height:calc(94vh - 100px);object-fit:contain}.camera-dialog p{margin:8px 0 0;font-size:12px;color:#c5d5e1}@media(max-width:900px){.camera-panel{top:64px;width:min(390px,60%)}.camera-tile span{font-size:9px}}@media(max-height:650px){.camera-panel{max-height:45%;overflow:auto}.camera-panel~.legend{bottom:135px;font-size:10px}}
+.camera-overlay-control{font-size:12px;margin-top:6px}.camera-dialog .camera-overlay-control{margin:0 0 10px}.camera-dialog img{max-height:calc(94vh - 180px)}
+</style>
+</head>
+<body>
+<header><div><h1>nuScenes 场景浏览器 <span class="muted">/ Scene Viewer</span></h1><small id="sceneTitle"></small></div><span class="badge">离线 3D · 全量点云 / Offline · Full point cloud</span></header>
+<main><aside>
+<section><h2>图层 / Layers</h2>
+<label class="check"><input type="checkbox" id="polygonLayer" checked>多边形平面 / Polygon</label>
+<label class="check" id="occupancyFlatControl" hidden><input type="checkbox" id="occupancy_flatLayer">表面占据铺平 / Surface occupancy at Z=0</label>
+<p class="method-note" id="occupancyFlatNote" hidden>Only surface-class voxels are flattened to Z=0; overlapping XY cells vote by semantic support. 中文：仅将 surface 类别体素铺平到 Z=0，重叠 XY 格按语义支持点数投票。</p>
+<label class="check" id="gridProjectionControl" hidden><input type="checkbox" id="grid_projectionLayer">零水平面栅格投影 / Z=0 grid projection</label>
+<p class="method-note" id="gridProjectionNote" hidden>Sample camera semantic pixels inside each Z=0 cell and vote; unknown cells stay blank. 中文：对 Z=0 栅格采集相机语义像素投票，未知区域留空。</p>
+<div id="mapOptions" hidden><label class="map-options" id="groundMapChoice" hidden>地面方法 / Ground <select id="groundMapMethod"><option value="polygon">LiDAR 多边形 / Polygon</option><option value="occupancy_flat">表面占据铺平 / Flattened surface occupancy</option><option value="grid_projection">零水平面栅格投影 / Z=0 projection</option></select></label><label class="check"><input id="mapGrid" type="checkbox" checked>地图网格 / Grid</label><p class="method-note">多边形地图；空白表示未知区域。 / Polygon map; blank = unknown.</p></div>
+<label class="check"><input type="checkbox" id="pointLayer" checked>染色点云 / Points</label>
+<label class="check"><input type="checkbox" id="groundPointLayer">指定平面点云 / Plane-class points</label>
+<label class="check"><input type="checkbox" id="bboxLayer">实例 3D 框 / Instance 3D boxes</label>
+<p class="method-note" id="bboxNote">Oriented 3D boxes enclose retained support; surface classes are excluded. New exports merge same-class camera instances within a frame when they share ≥3 LiDAR points and ≥30% of the smaller support. Unmatched boxes may repeat; these boxes are not tracks. 中文：三维旋转框包围保留点，surface 类不生成；新导出中同帧同类跨相机实例共享至少3点且占较小实例至少30%时合并。未匹配实例仍可能重复，跨帧不跟踪。</p>
+<label class="check"><input type="checkbox" id="occupancyLayer" disabled>3D occupancy / 三维占据</label>
+<label class="check"><input type="checkbox" id="unassignedOccupancyLayer" disabled>未染色点占据 / Unassigned occupancy</label>
+<p class="method-note" id="unassignedOccupancyNote">Class 0 points use neutral gray voxels; independent of semantic class filters. 中文：语义为0的点生成灰色体素，独立于语义类别筛选，包含清洗后未分配的点。</p>
+<label class="slider-label" for="occupancyOpacity">Occupancy opacity / 占据透明度 <output id="occupancyOpacityValue">0.35</output></label><input id="occupancyOpacity" type="range" min="0.05" max="1" step="0.05" value="0.35" disabled>
+<p class="method-note" id="occupancyNote">Semantic voxels use the most frequent retained point class and its saved color. Unassigned points are excluded; class toggles hide winning classes. 中文：语义体素取保留点中数量最多的类别并按类别配色，未分配点不参与；类别开关控制对应体素显示。</p>
+<label class="check"><input type="checkbox" id="trajectoryLayer" checked>自车轨迹 / Ego trajectory</label>
+</section>
+<section><h2>语义类别 / Classes</h2><div id="classes"></div><div class="small-buttons"><button id="selectAll" type="button">全部显示 / All</button><button id="selectNone" type="button">全部隐藏 / None</button></div><p class="footer-note">指定平面类别同时控制平面与对应点云。未分配点为白色并默认隐藏。</p></section>
+<section><h2>显示 / Appearance</h2><label class="slider-label" for="pointSize">点大小 / Point size <output id="pointSizeValue">2.5</output></label><input id="pointSize" type="range" min="1" max="9" step="0.5" value="2.5"><label class="slider-label" for="planeOpacity">平面透明度 / Plane opacity <output id="planeOpacityValue">0.72</output></label><input id="planeOpacity" type="range" min="0.05" max="1" step="0.05" value="0.72"></section>
+<section><h2>坐标与说明 / Coordinates</h2><div id="coordinateFrame" class="footer-note"></div><p id="limitations"></p></section>
+</aside><div id="stage"><canvas id="viewer" aria-label="三维语义点云场景 / 3D semantic scene"></canvas><canvas id="bevMapCanvas" aria-label="BEV 语义栅格地图 / BEV semantic grid map" hidden></canvas>
+<div class="toolbar"><button id="scene3dView" class="active" type="button">3D场景</button><button id="bevMapView" type="button">BEV Map</button><button id="fitView" type="button">适应场景 / Fit</button><button id="topView" type="button">俯视 / Top</button><button id="orbitView" type="button">三维 / 3D</button><button id="exportMap" type="button" hidden>导出地图 / PNG</button></div>
+<details id="cameraPanel" class="camera-panel" open><summary>六路相机 / Six cameras · <span id="cameraFrame"></span></summary><label class="check camera-overlay-control"><input id="cameraSemantics" type="checkbox">SAM3 语义叠加 / Semantic overlay</label><label class="check camera-overlay-control"><input id="cameraPoints" type="checkbox">投影点云 / Projected LiDAR</label><div id="cameraGrid" class="camera-grid"></div></details>
+<div class="legend"><div id="stats" aria-live="polite"></div><div id="frameInfo"></div></div>
+<div class="hint">左键旋转 · 右键 / Shift 平移 · 滚轮缩放 · ← → 切帧 · 空格播放<br>Drag orbit · Right / Shift drag pan · Wheel zoom · Arrows / Space</div>
+<div class="timeline"><div class="timeline-top"><button id="prevFrame" type="button" aria-label="上一帧 / Previous">◀</button><button id="playPause" type="button">播放 / Play</button><button id="nextFrame" type="button" aria-label="下一帧 / Next">▶</button><strong id="frameNumber"></strong><span class="spacer"></span><label>FPS <select id="fps"><option value="2">2</option><option value="5" selected>5</option><option value="10">10</option><option value="20">20</option></select></label><label><input id="allFrames" type="checkbox">全帧叠加 / All frames</label></div><input id="timeline" type="range" min="0" max="0" value="0" step="1" aria-label="帧 / Frame"><div id="trailWarning" class="warning" hidden>地面按每格类别出现帧数投票融合；点云和实例框仍为多时刻叠加。 / Ground uses per-cell frame voting; points and boxes retain multiple timestamps.</div></div>
+<div id="error" role="alert" hidden></div></div></main>
+<dialog id="cameraDialog" class="camera-dialog" aria-labelledby="cameraDialogTitle"><header><h2 id="cameraDialogTitle"></h2><button id="closeCamera" type="button" autofocus>关闭 / Close · Esc</button></header><label class="check camera-overlay-control"><input id="cameraDialogSemantics" type="checkbox">SAM3 语义叠加 / Semantic overlay</label><label class="check camera-overlay-control"><input id="cameraDialogPoints" type="checkbox">投影点云 / Projected LiDAR</label><img id="cameraFullImage" alt=""><p id="cameraImageInfo"></p></dialog>
+<script>
+'use strict';
+const DATA = __SCENE_DATA__;
+(() => {
+  const $ = id => document.getElementById(id);
+  const fail = error => { window.__sceneViewerReady = false; $('error').hidden = false; $('error').textContent = '无法显示三维场景 / Unable to render scene\n' + (error && error.message || String(error)); console.error(error); };
+  try {
+    if (!DATA || !Array.isArray(DATA.frames) || !DATA.frames.length) throw new Error('Scene contains no frames.');
+    const canvas = $('viewer');
+    const gl = canvas.getContext('webgl', {antialias:true, alpha:false, preserveDrawingBuffer:true});
+    if (!gl) throw new Error('WebGL 不可用，请启用浏览器硬件加速或软件 WebGL。 / WebGL is unavailable.');
+    const classNames = ['未分配 / Unassigned','人行道 / Sidewalk','道路 / Road','行人 / Pedestrian','车辆 / Vehicle','自行车 / Bike','骑行者 / Rider'];
+    const fallbackColors = [[255,255,255],[246,169,59],[80,175,225],[239,70,116],[95,84,225],[35,184,149],[196,74,209]];
+    const savedClasses = DATA.classes === undefined ? classNames.map((name,id)=>({id,name,label:name,color:fallbackColors[id]})) : DATA.classes;
+    if (!Array.isArray(savedClasses) || !savedClasses.length) throw new Error('Scene classes must be a nonempty array.');
+    const classById = new Map();
+    const classes = savedClasses.map(source => {
+      const id = source.id;
+      if (!Number.isInteger(id) || id < 0 || id > 254 || classById.has(id)) throw new Error('Scene class IDs must be unique integers in 0..254.');
+      const color = Array.isArray(source.color) && source.color.length === 3 && source.color.every(v=>Number.isFinite(v)&&v>=0&&v<=255) ? source.color : (fallbackColors[id] || [255,255,255]);
+      const entry = {id,name:source.name || String(id),label:source.label || source.name || String(id),color:id===0?[255,255,255]:color};
+      classById.set(id,entry);return entry;
+    }).sort((a,b)=>a.id-b.id);
+    if (!classById.has(0)) throw new Error('Scene classes must include unassigned ID 0.');
+    const classSlots = Math.max(...classes.map(c=>c.id))+1;
+    const selectedPlanes = DATA.plane_class_ids !== undefined ? DATA.plane_class_ids : (DATA.metadata && DATA.metadata.plane_class_ids !== undefined ? DATA.metadata.plane_class_ids : [1,2]);
+    if (!Array.isArray(selectedPlanes) || selectedPlanes.some(id=>!Number.isInteger(id)||id===0||!classById.has(id)) || new Set(selectedPlanes).size!==selectedPlanes.length) throw new Error('Plane class IDs must be unique saved nonzero class IDs.');
+    const planeClassIds = selectedPlanes.slice(),planeIds = new Set(planeClassIds);
+    const hasGridProjection=DATA.frames.some(frame=>frame.surfaces && Object.hasOwn(frame.surfaces,'grid_projection'));
+    const hasOccupancyFlat=DATA.frames.some(frame=>frame.surfaces && Object.hasOwn(frame.surfaces,'occupancy_flat'));
+    const surfaceMethods=['polygon',...(hasGridProjection?['grid_projection']:[]),...(hasOccupancyFlat?['occupancy_flat']:[])];
+    $('occupancyFlatControl').hidden=!hasOccupancyFlat;$('occupancyFlatNote').hidden=!hasOccupancyFlat;
+    $('gridProjectionControl').hidden=!hasGridProjection;$('gridProjectionNote').hidden=!hasGridProjection;
+    const state = {mode:'3d',mapMethod:'polygon',mapCells:0,mapConflictCells:0,mapGrid:true,frame:0,allFrames:false,classIds:new Set(classes.filter(c=>c.id!==0).map(c=>c.id)),methods:new Set(['polygon']),points:true,groundPoints:false,boxes:false,boxCount:0,boxDrawCalls:0,occupancy:false,occupancyCount:0,occupancyPointCount:0,unassignedOccupancy:false,unassignedOccupancyCount:0,unassignedOccupancyPointCount:0,trajectory:true,playing:false,pointCount:0,triangleCount:0,drawCalls:0,pointDrawCalls:0,surfaceDrawCalls:0,renderCount:0};
+    classes.forEach(c => {
+      const label = document.createElement('label'); label.className = 'check';
+      const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.dataset.class = String(c.id); checkbox.checked = state.classIds.has(c.id);
+      const swatch = document.createElement('span'); swatch.className='swatch'; swatch.style.background = `rgb(${c.color.join(',')})`;
+      const name = document.createElement('span'); name.className='class-text'; name.textContent = `${c.id} · ${c.label}`; name.title = c.name;
+      checkbox.addEventListener('change', () => { checkbox.checked ? state.classIds.add(c.id) : state.classIds.delete(c.id); invalidate(); });
+      label.append(checkbox,swatch,name); $('classes').append(label);
+    });
+    $('sceneTitle').textContent = DATA.scene + ' · ' + DATA.frames.length + ' 帧 / frames';
+    $('coordinateFrame').textContent = DATA.metadata && DATA.metadata.coordinate_frame || 'scene first ego yaw, meters';
+    $('limitations').textContent = DATA.metadata && DATA.metadata.limitations || '';
+    $('timeline').max = DATA.frames.length - 1;
+    const littleEndian = new Uint8Array(new Uint32Array([0x01020304]).buffer)[0] === 4;
+    function decode(base64, type) {
+      const text = atob(base64 || ''); const bytes = new Uint8Array(text.length);
+      for (let i=0;i<text.length;i++) bytes[i] = text.charCodeAt(i);
+      if (type === 'u8') return bytes;
+      if (bytes.byteLength % 4) throw new Error('Invalid float32 payload length.');
+      if (littleEndian) return new Float32Array(bytes.buffer);
+      const view = new DataView(bytes.buffer); const result = new Float32Array(bytes.byteLength / 4);
+      for (let i=0;i<result.length;i++) result[i] = view.getFloat32(i*4,true);
+      return result;
+    }
+    const frames = DATA.frames.map((frame, index) => {
+      const points = frame.points || {xyz:'',labels:'',count:0};
+      const xyz = decode(points.xyz,'f32'), labels = decode(points.labels,'u8');
+      const count = Number(points.count);
+      if (!Number.isInteger(count) || count < 0 || xyz.length !== count * 3 || labels.length !== count) throw new Error(`Frame ${index}: point count/payload mismatch.`);
+      const histogram = new Uint32Array(classSlots);
+      for (let i=0;i<labels.length;i++) { if (!classById.has(labels[i])) labels[i] = 0; histogram[labels[i]]++; }
+      const surfaces = {};
+      for (const method of surfaceMethods) {
+        surfaces[method] = {};
+        for (const id of planeClassIds) {
+          const source = frame.surfaces && frame.surfaces[method] && frame.surfaces[method][String(id)];
+          const vertices = decode(source && source.xyz,'f32'); const vertexCount = source ? Number(source.count) : 0;
+          if (!Number.isInteger(vertexCount) || vertexCount < 0 || vertices.length !== vertexCount*3 || vertexCount%3) throw new Error(`Frame ${index}: ${method}/${id} triangle payload mismatch.`);
+          surfaces[method][id] = {xyz:vertices,count:vertexCount,buffer:null};
+        }
+      }
+      // Cuboids use bottom CCW corners 0..3 and corresponding top corners 4..7.
+      // Legacy empty/point/segment/rectangle records remain readable.
+      const boxes=frame.bounding_boxes === undefined ? [] : frame.bounding_boxes;
+      if(!Array.isArray(boxes))throw new Error(`Frame ${index}: bounding_boxes must be an array.`);
+      const boxGroups=new Map(),cornerCounts={empty:0,point:1,segment:2,rectangle:4,cuboid:8};
+      const cuboidEdges=[[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
+      for(const record of boxes){
+        if(!record || !Number.isInteger(record.class_id) || !classById.has(record.class_id))throw new Error(`Frame ${index}: box class_id must be a saved class ID.`);
+        if(planeIds.has(record.class_id))continue;
+        const corners=record.corners_scene,m=cornerCounts[record.geometry_type];
+        if(!Object.hasOwn(cornerCounts,record.geometry_type) || !Array.isArray(corners) || corners.length!==m || corners.some(row=>!Array.isArray(row)||row.length!==3||!row.every(Number.isFinite)))throw new Error(`Frame ${index}: invalid box geometry/corners_scene.`);
+        if(!m)continue;
+        const id=record.class_id;
+        if(!boxGroups.has(id))boxGroups.set(id,{records:[],lines:[],singletons:[],lineBuffer:null,pointBuffer:null});
+        const group=boxGroups.get(id);group.records.push(record);
+        if(record.geometry_type==='cuboid')for(const [a,b] of cuboidEdges)group.lines.push(...corners[a],...corners[b]);
+        else if(m===1)group.singletons.push(...corners[0]);
+        else for(let i=0;i<(m===4?4:1);i++)group.lines.push(...corners[i],...corners[(i+1)%m]);
+      }
+      for(const group of boxGroups.values()){group.lines=new Float32Array(group.lines);group.singletons=new Float32Array(group.singletons);}
+      return {source:frame,xyz,labels,count,histogram,surfaces,boxes,boxGroups,xyzBuffer:null,labelBuffer:null};
+    });
+    const availableBoxCount=frames.reduce((n,f)=>n+Array.from(f.boxGroups.values()).reduce((sum,g)=>sum+g.records.length,0),0);
+    $('bboxLayer').disabled=!availableBoxCount;
+    $('bboxLayer').title=availableBoxCount?'独立于点云和平面图层，跟随类别和帧选择。 / Independent layer; follows classes and frames.':'没有可绘制的实例框，请重新运行支持 bounding_boxes 元数据的导出器。 / No drawable boxes; rerun the exporter with bounding_boxes metadata.';
+    if(!availableBoxCount)$('bboxNote').textContent+=' '+$('bboxLayer').title;
+    const occupancySource=DATA.occupancy_grid;
+     const occupancyResolution=occupancySource&&Number(occupancySource.resolution),occupancyOrigin=occupancySource&&occupancySource.origin;
+     function validateOccupancy(source,label){
+       if(!source||!Array.isArray(source.indices)||!Array.isArray(source.point_counts)||source.indices.length!==source.point_counts.length)throw new Error(`Invalid occupancy ${label} arrays.`);
+       if(source.indices.some(row=>!Array.isArray(row)||row.length!==3||!row.every(Number.isSafeInteger))||source.point_counts.some(n=>!Number.isSafeInteger(n)||n<0))throw new Error(`Invalid occupancy ${label} voxel records.`);
+       const pointCount=source.point_counts.reduce((a,b)=>a+b,0);
+       if(source.voxel_count!==undefined&&source.voxel_count!==source.indices.length||source.point_count!==undefined&&source.point_count!==pointCount)throw new Error(`Invalid occupancy ${label} counts.`);
+       const labels=source.class_ids;
+       if(labels!==undefined&&(!Array.isArray(labels)||labels.length!==source.indices.length||labels.some(id=>!Number.isInteger(id)||id===0||!classById.has(id))))throw new Error(`Invalid occupancy ${label} semantic classes.`);
+       const groups=new Map();
+       for(let i=0;i<source.indices.length;i++){const id=labels?labels[i]:null;if(!groups.has(id))groups.set(id,{classId:id,indices:[],pointCount:0,voxelCount:0});const group=groups.get(id);group.indices.push(source.indices[i]);group.pointCount+=source.point_counts[i];group.voxelCount++;}
+       return {groups:Array.from(groups.values()),voxelCount:source.indices.length,pointCount};
+     }
+     const hasOccupancy=Boolean(occupancySource&&Number.isFinite(occupancyResolution)&&occupancyResolution>0&&Array.isArray(occupancyOrigin)&&occupancyOrigin.length===3&&occupancyOrigin.every(Number.isFinite)&&Array.isArray(occupancySource.frames)&&occupancySource.frames.length===frames.length&&occupancySource.fused);
+     const occupancyFrames=hasOccupancy?occupancySource.frames.map((frame,i)=>validateOccupancy(frame,`frame ${i}`)):[],occupancyFused=hasOccupancy?validateOccupancy(occupancySource.fused,'fused'):null;
+     $('occupancyLayer').disabled=!hasOccupancy;$('occupancyOpacity').disabled=!hasOccupancy;$('occupancyLayer').title=hasOccupancy?'Independent occupied voxels; all frames draws fused occupancy once.':'No occupancy_grid payload.';$('occupancyNote').hidden=!hasOccupancy;
+     const unassignedSource=DATA.unassigned_occupancy_grid;
+     const unassignedResolution=unassignedSource&&Number(unassignedSource.resolution),unassignedOrigin=unassignedSource&&unassignedSource.origin;
+     const hasUnassignedOccupancy=Boolean(unassignedSource&&Number.isFinite(unassignedResolution)&&unassignedResolution>0&&Array.isArray(unassignedOrigin)&&unassignedOrigin.length===3&&unassignedOrigin.every(Number.isFinite)&&Array.isArray(unassignedSource.frames)&&unassignedSource.frames.length===frames.length&&unassignedSource.fused);
+     const unassignedFrames=hasUnassignedOccupancy?unassignedSource.frames.map((frame,i)=>validateOccupancy(frame,`unassigned frame ${i}`)):[],unassignedFused=hasUnassignedOccupancy?validateOccupancy(unassignedSource.fused,'unassigned fused'):null;
+     $('unassignedOccupancyLayer').disabled=!hasUnassignedOccupancy;
+     $('unassignedOccupancyNote').hidden=!hasUnassignedOccupancy;
+     $('unassignedOccupancyLayer').title=hasUnassignedOccupancy?'显示未染色点的占据体素 / Show class 0 occupied voxels':'此结果无未染色占据数据，请重新导出 / Re-export to include unassigned occupancy';
+     $('occupancyOpacity').disabled=!hasOccupancy&&!hasUnassignedOccupancy;
+     const occupancyExtension=gl.getExtension('ANGLE_instanced_arrays');const occupancyChunkSize=65536;const cubeXYZ=new Float32Array([[0,1,2,3],[4,7,6,5],[0,4,5,1],[3,2,6,7],[0,3,7,4],[1,5,6,2]].flatMap(face=>[0,1,2,0,2,3].flatMap(i=>[[-.5,-.5,-.5],[.5,-.5,-.5],[.5,.5,-.5],[-.5,.5,-.5],[-.5,-.5,.5],[.5,-.5,.5],[.5,.5,.5],[-.5,.5,.5]][face[i]])));
+     const mapCanvas=$('bevMapCanvas'),mapContext=mapCanvas.getContext('2d'),mapData=DATA.bev_map,mapGrid=mapData && mapData.grid;
+    const hasMap=Boolean(mapContext && mapGrid && Number.isInteger(mapGrid.width) && Number.isInteger(mapGrid.height) && mapGrid.width>0 && mapGrid.height>0 && Number.isFinite(mapGrid.resolution) && mapGrid.resolution>0 && Number.isFinite(mapGrid.x_min) && Number.isFinite(mapGrid.y_min) && mapData.fused && Array.isArray(mapData.frames));
+    $('bevMapView').disabled=!hasMap;$('bevMapView').title=hasMap?'正交语义栅格地图 · +X 向右 / +Y 向上':'此文件未包含 BEV 地图，请使用支持 bev_map 的导出文件。';
+    const hasProjectedMap=Boolean(hasMap && mapData.fused.grid_projection);
+    const hasFlatMap=Boolean(hasMap && mapData.fused.occupancy_flat);
+    for(const option of $('groundMapMethod').options)option.hidden=option.disabled=(option.value==='grid_projection'&&!hasProjectedMap)||(option.value==='occupancy_flat'&&!hasFlatMap);
+    $('groundMapChoice').hidden=!hasProjectedMap&&!hasFlatMap;
+    const mapView={x:0,y:0,scale:1,fitted:false},mapRuns=new Map(),mapImages=new Map();
+    const originalHint=document.querySelector('.hint').innerHTML,originalWarning=$('trailWarning').textContent;
+    function decodeRuns(source) {
+      if(!source)return new Uint32Array(0);if(mapRuns.has(source))return mapRuns.get(source);
+      const bytes=decode(source.runs,'u8');if(bytes.byteLength%12)throw new Error('Invalid BEV uint32 run payload length.');
+      const runs=new Uint32Array(bytes.byteLength/4),view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);
+      for(let i=0;i<runs.length;i++)runs[i]=view.getUint32(i*4,true);
+      for(let i=0;i<runs.length;i+=3){if(!runs[i+1] || runs[i]+runs[i+1]>mapGrid.width*mapGrid.height)throw new Error('BEV run exceeds grid bounds or is empty.');if(!classById.has(runs[i+2]) || !planeIds.has(runs[i+2]))throw new Error('BEV run must use a saved plane class ID.');}
+      mapRuns.set(source,runs);if(mapRuns.size>4)mapRuns.delete(mapRuns.keys().next().value);return runs;
+    }
+    const fusedSurfaceCache=new Map();
+    function fusedSurfaces(method){
+      if(fusedSurfaceCache.has(method))return fusedSurfaceCache.get(method);
+      const direct=DATA.fused_surfaces && DATA.fused_surfaces[method];
+      if(direct){
+        const groups={};
+        for(const id of planeClassIds){const source=direct[id],xyz=decode(source&&source.xyz,'f32'),count=source?Number(source.count):0;if(!Number.isInteger(count)||count<0||xyz.length!==count*3||count%3)throw new Error('Invalid fused surface geometry');groups[id]={xyz,count,buffer:null};}
+        fusedSurfaceCache.set(method,groups);return groups;
+      }
+      const source=hasMap && mapData.fused[method];
+      if(!source)return null;
+      const groups={},runs=decodeRuns(source),resolution=mapGrid.resolution;
+      const top=Number.isFinite(mapGrid.y_max)?mapGrid.y_max:mapGrid.y_min+mapGrid.height*resolution;
+      const heights=source.class_heights_scene || {};
+      for(const id of planeClassIds)groups[id]={vertices:[],count:0,buffer:null};
+      for(let i=0;i<runs.length;i+=3){
+        let start=runs[i],remaining=runs[i+1];const id=runs[i+2],group=groups[id];
+        let z=Number(heights[id]);
+        if(!Number.isFinite(z)){
+          if(method==='grid_projection')z=0;
+          else{const observed=[];for(const frame of frames){const xyz=frame.surfaces[method]?.[id]?.xyz;if(xyz?.length)observed.push(xyz[2]);}observed.sort((a,b)=>a-b);const n=observed.length;z=n?(observed[Math.floor((n-1)/2)]+observed[Math.floor(n/2)])/2:0;}
+        }
+        while(remaining){
+          const row=Math.floor(start/mapGrid.width),col=start%mapGrid.width,length=Math.min(remaining,mapGrid.width-col);
+          const x0=mapGrid.x_min+col*resolution,x1=x0+length*resolution,y1=top-row*resolution,y0=y1-resolution;
+          group.vertices.push(x0,y0,z,x1,y0,z,x1,y1,z,x0,y0,z,x1,y1,z,x0,y1,z);
+          start+=length;remaining-=length;
+        }
+      }
+      for(const group of Object.values(groups)){group.xyz=new Float32Array(group.vertices);group.count=group.xyz.length/3;delete group.vertices;}
+      fusedSurfaceCache.set(method,groups);return groups;
+    }
+    function mapRaster() {
+      const key=`${state.allFrames?'fused':state.frame}:${state.mapMethod}:${planeClassIds.filter(id=>state.classIds.has(id)).join(',')}`;
+      if(mapImages.has(key)){const cached=mapImages.get(key);mapImages.delete(key);mapImages.set(key,cached);return cached;}
+      const source=(state.allFrames?mapData.fused:mapData.frames[state.frame] || {})[state.mapMethod],runs=decodeRuns(source);
+      const image=document.createElement('canvas');image.width=mapGrid.width;image.height=mapGrid.height;
+      const context=image.getContext('2d'),pixels=context.createImageData(image.width,image.height);let cells=0;
+      for(let i=0;i<runs.length;i+=3){const id=runs[i+2];if(!classById.has(id)||!planeIds.has(id)||!state.classIds.has(id))continue;const color=classById.get(id).color,end=runs[i]+runs[i+1];cells+=runs[i+1];
+        for(let cell=runs[i];cell<end;cell++){const p=cell*4;pixels.data[p]=color[0];pixels.data[p+1]=color[1];pixels.data[p+2]=color[2];pixels.data[p+3]=255;}}
+      context.putImageData(pixels,0,0);const result={image,cells,conflicts:Number(source && source.conflict_cells || 0)};
+      mapImages.set(key,result);if(mapImages.size>4)mapImages.delete(mapImages.keys().next().value);return result;
+    }
+    function fitMap(){if(!hasMap)return;const w=Math.max(1,$('stage').clientWidth),h=Math.max(1,$('stage').clientHeight);mapView.x=mapGrid.x_min+mapGrid.width*mapGrid.resolution/2;mapView.y=mapGrid.y_min+mapGrid.height*mapGrid.resolution/2;mapView.scale=Math.max(.0001,Math.min(Math.max(1,w-80)/(mapGrid.width*mapGrid.resolution),Math.max(1,h-250)/(mapGrid.height*mapGrid.resolution)));mapView.fitted=true;invalidate();}
+    function setMode(mode){if(mode==='bev-map'&&!hasMap)return;state.mode=mode;const active=mode==='bev-map';canvas.hidden=active;mapCanvas.hidden=!active;$('mapOptions').hidden=!active;$('exportMap').hidden=!active;$('stage').classList.toggle('map-mode',active);$('bevMapView').classList.toggle('active',active);$('scene3dView').classList.toggle('active',!active);document.querySelector('.hint').innerHTML=active?'左键 / 右键 / Shift 拖动平移 · 滚轮缩放 · +X 向右 / +Y 向上<br>Drag pan · Wheel zoom · 空白为未知 / Blank = unknown':originalHint;if(active&&!mapView.fitted)fitMap();invalidate();}
+    function renderMap(){
+      const rect=mapCanvas.getBoundingClientRect(),w=rect.width,h=rect.height;dpr=Math.min(2,window.devicePixelRatio||1);
+      const width=Math.max(1,Math.round(w*dpr)),height=Math.max(1,Math.round(h*dpr));if(mapCanvas.width!==width||mapCanvas.height!==height){mapCanvas.width=width;mapCanvas.height=height;}
+      const ctx=mapContext,s=mapView.scale,cx=w/2,cy=(h-50)/2,px=x=>cx+(x-mapView.x)*s,py=y=>cy-(y-mapView.y)*s;
+      ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,w,h);ctx.fillStyle='#f1f4f7';ctx.fillRect(0,0,w,h);ctx.imageSmoothingEnabled=false;
+      state.pointCount=0;state.occupancyCount=0;state.occupancyPointCount=0;state.unassignedOccupancyCount=0;state.unassignedOccupancyPointCount=0;state.triangleCount=0;state.boxCount=0;state.boxDrawCalls=0;state.drawCalls=0;state.pointDrawCalls=0;state.surfaceDrawCalls=0;
+      const raster=mapRaster();state.mapCells=raster.cells;state.mapConflictCells=raster.conflicts;
+      const left=px(mapGrid.x_min),top=py(mapGrid.y_min+mapGrid.height*mapGrid.resolution),cell=mapGrid.resolution*s;
+      ctx.drawImage(raster.image,left,top,mapGrid.width*cell,mapGrid.height*cell);if(raster.cells)state.drawCalls++;
+      if(state.mapGrid && cell>=4){
+        const c0=Math.max(0,Math.ceil(-left/cell)),c1=Math.min(mapGrid.width,Math.floor((w-left)/cell)),r0=Math.max(0,Math.ceil(-top/cell)),r1=Math.min(mapGrid.height,Math.floor((h-top)/cell));
+        ctx.strokeStyle='rgba(39,65,82,.21)';ctx.lineWidth=.65;ctx.beginPath();
+        for(let c=c0;c<=c1;c++){const x=left+c*cell;ctx.moveTo(x,Math.max(0,top));ctx.lineTo(x,Math.min(h,top+mapGrid.height*cell));}
+        for(let r=r0;r<=r1;r++){const y=top+r*cell;ctx.moveTo(Math.max(0,left),y);ctx.lineTo(Math.min(w,left+mapGrid.width*cell),y);}ctx.stroke();
+      }
+      const selected=state.allFrames?frames:[frames[state.frame]],ids=visibleIds(),pointRadius=Number($('pointSize').value)/2;
+      if(state.boxes)for(const f of selected)for(const [id,group] of f.boxGroups){
+        if(!state.classIds.has(id))continue;
+        const color=classById.get(id).color.map(v=>Math.round(v*.7));ctx.strokeStyle=ctx.fillStyle=`rgb(${color.join(',')})`;ctx.lineWidth=1.5;
+        state.boxCount+=group.records.length;
+        if(group.lines.length){ctx.beginPath();for(const record of group.records){const corners=record.geometry_type==='cuboid'?record.corners_scene.slice(0,4):record.corners_scene;if(corners.length<2)continue;ctx.moveTo(px(corners[0][0]),py(corners[0][1]));for(let i=1;i<corners.length;i++)ctx.lineTo(px(corners[i][0]),py(corners[i][1]));if(corners.length===4)ctx.closePath();}ctx.stroke();state.drawCalls++;state.boxDrawCalls++;}
+        if(group.singletons.length){ctx.beginPath();for(let i=0;i<group.singletons.length;i+=3){const x=px(group.singletons[i]),y=py(group.singletons[i+1]);ctx.moveTo(x+3,y);ctx.arc(x,y,3,0,Math.PI*2);}ctx.fill();state.drawCalls++;state.boxDrawCalls++;}
+      }
+      if(state.points && ids.length)for(const f of selected){const count=ids.reduce((n,id)=>n+f.histogram[id],0);state.pointCount+=count;if(!count)continue;
+        for(const id of ids){if(!f.histogram[id])continue;ctx.fillStyle=`rgb(${classById.get(id).color.join(',')})`;ctx.beginPath();let batch=0;
+          for(let i=0;i<f.count;i++){if(f.labels[i]!==id)continue;const x=px(f.xyz[i*3]),y=py(f.xyz[i*3+1]);if(x+pointRadius<0||x-pointRadius>w||y+pointRadius<0||y-pointRadius>h)continue;ctx.moveTo(x+pointRadius,y);ctx.arc(x,y,pointRadius,0,Math.PI*2);if(++batch===5000){ctx.fill();ctx.beginPath();batch=0;}}ctx.fill();}
+        state.drawCalls++;state.pointDrawCalls++;
+      }
+      if(state.trajectory){ctx.strokeStyle='#1f5c6e';ctx.lineWidth=1.5;ctx.beginPath();frames.forEach((f,i)=>{const ego=f.source.ego||[0,0,0];i?ctx.lineTo(px(ego[0]),py(ego[1])):ctx.moveTo(px(ego[0]),py(ego[1]));});ctx.stroke();const ego=frames[state.frame].source.ego||[0,0,0];ctx.fillStyle='#ffd139';ctx.strokeStyle='#183044';ctx.beginPath();ctx.arc(px(ego[0]),py(ego[1]),5,0,Math.PI*2);ctx.fill();ctx.stroke();state.drawCalls++;}
+      const ax=34,ay=Math.max(90,h-145);ctx.strokeStyle='#466273';ctx.fillStyle='#304e60';ctx.lineWidth=1.5;ctx.font='11px system-ui';ctx.beginPath();ctx.moveTo(ax,ay-38);ctx.lineTo(ax,ay);ctx.lineTo(ax+44,ay);ctx.moveTo(ax-4,ay-32);ctx.lineTo(ax,ay-38);ctx.lineTo(ax+4,ay-32);ctx.moveTo(ax+38,ay-4);ctx.lineTo(ax+44,ay);ctx.lineTo(ax+38,ay+4);ctx.stroke();ctx.fillText('+Y',ax-9,ay-44);ctx.fillText('+X',ax+48,ay+4);
+      const meters=Math.pow(10,Math.floor(Math.log10(100/s))),bar=meters*s;ctx.beginPath();ctx.moveTo(ax+110,ay);ctx.lineTo(ax+110+bar,ay);ctx.stroke();ctx.fillText(`${Number(meters.toPrecision(2))} m`,ax+110,ay-7);
+      state.renderCount++;updateText();window.__sceneViewerReady=true;
+    }
+    function shader(type,source) { const result=gl.createShader(type); gl.shaderSource(result,source); gl.compileShader(result); if (!gl.getShaderParameter(result,gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(result)); return result; }
+    const vertex = shader(gl.VERTEX_SHADER, `
+      attribute vec3 a_position; attribute float a_label; attribute vec3 a_offset;
+      uniform mat4 u_matrix; uniform float u_size; uniform float u_offset; uniform float u_voxelSize; uniform bool u_instanced;
+      uniform bool u_labeled; uniform vec3 u_color; uniform vec3 u_colors[${classSlots}]; uniform float u_visible[${classSlots}];
+      varying vec3 v_color; varying float v_visible;
+      void main(){ int id=int(clamp(a_label,0.0,${classSlots-1}.0)); v_color=u_labeled?u_colors[id]:u_color; v_visible=u_labeled?u_visible[id]:1.0;
+        gl_Position=u_matrix*vec4((u_instanced?a_position*u_voxelSize:a_position)+a_offset+vec3(0.0,0.0,u_offset),1.0); gl_PointSize=u_size; }
+    `);
+    const fragment = shader(gl.FRAGMENT_SHADER, `
+      precision mediump float; varying vec3 v_color; varying float v_visible; uniform float u_opacity; uniform bool u_round;
+      void main(){if(v_visible<0.5)discard; if(u_round && distance(gl_PointCoord,vec2(0.5))>0.5)discard; gl_FragColor=vec4(v_color,u_opacity);}
+    `);
+    const program = gl.createProgram(); gl.attachShader(program,vertex); gl.attachShader(program,fragment); gl.linkProgram(program);
+    if (!gl.getProgramParameter(program,gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(program));
+    gl.useProgram(program);
+    const attr={position:gl.getAttribLocation(program,'a_position'),label:gl.getAttribLocation(program,'a_label'),offset:gl.getAttribLocation(program,'a_offset')};
+    const uniforms={}; for (const key of ['matrix','size','offset','voxelSize','instanced','labeled','color','colors','visible','opacity','round']) uniforms[key]=gl.getUniformLocation(program,'u_'+key + (key==='colors'||key==='visible'?'[0]':''));
+    gl.uniform3fv(uniforms.colors,new Float32Array(Array.from({length:classSlots},(_,id)=>(classById.get(id)||classById.get(0)).color.map(v=>v/255)).flat()));
+    gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LEQUAL); gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA); gl.clearColor(.945,.958,.97,1);
+    const bounds = DATA.bounds || {min:[-20,-20,-3],max:[20,20,3]};
+    if (![...bounds.min,...bounds.max].every(Number.isFinite)) throw new Error('Scene bounds must be finite.');
+    const center=bounds.min.map((v,i)=>(v+bounds.max[i])/2);
+    const radius=Math.max(5,Math.hypot(...bounds.max.map((v,i)=>(v-bounds.min[i])/2)));
+    const camera={target:center.slice(),distance:radius*2.65,yaw:-Math.PI/3,pitch:Math.PI/3};
+    const subtract=(a,b)=>a.map((v,i)=>v-b[i]);
+    const dot=(a,b)=>a.reduce((s,v,i)=>s+v*b[i],0);
+    const cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
+    const normalize=a=>{const n=Math.hypot(...a)||1;return a.map(v=>v/n);};
+    function multiply(a,b) { const out=new Float32Array(16); for(let c=0;c<4;c++) for(let r=0;r<4;r++) for(let k=0;k<4;k++) out[c*4+r]+=a[k*4+r]*b[c*4+k]; return out; }
+    function matrix() {
+      const cp=Math.cos(camera.pitch),sp=Math.sin(camera.pitch),cy=Math.cos(camera.yaw),sy=Math.sin(camera.yaw);
+      const eye=camera.target.map((v,i)=>v+camera.distance*[cp*cy,cp*sy,sp][i]);
+      const z=normalize(subtract(eye,camera.target)),x=normalize(cross([0,0,1],z)),y=cross(z,x);
+      const view=new Float32Array([x[0],y[0],z[0],0,x[1],y[1],z[1],0,x[2],y[2],z[2],0,-dot(x,eye),-dot(y,eye),-dot(z,eye),1]);
+      const near=Math.max(.02,camera.distance/10000),far=Math.max(camera.distance+radius*8,1000),f=1/Math.tan(Math.PI/8),aspect=canvas.width/canvas.height;
+      const projection=new Float32Array([f/aspect,0,0,0,0,f,0,0,0,0,(far+near)/(near-far),-1,0,0,2*far*near/(near-far),0]);
+      return multiply(projection,view);
+    }
+    function buffer(data) { const b=gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER,b); gl.bufferData(gl.ARRAY_BUFFER,data,gl.STATIC_DRAW); return b; }
+    const grid=[]; const gridStep=Math.pow(10,Math.floor(Math.log10(radius/8))); const extent=Math.ceil(radius/gridStep)*gridStep;
+    const groundZ=bounds.min[2]-.08;
+    for(let p=-extent;p<=extent+gridStep*.01;p+=gridStep) grid.push(center[0]+p,center[1]-extent,groundZ,center[0]+p,center[1]+extent,groundZ,center[0]-extent,center[1]+p,groundZ,center[0]+extent,center[1]+p,groundZ);
+    const gridBuffer=buffer(new Float32Array(grid));
+    const trajectory=new Float32Array(DATA.frames.flatMap(f=>f.ego || [0,0,0])); const trajectoryBuffer=buffer(trajectory);
+    const markerBuffer=buffer(new Float32Array(3));
+     const occupancyCubeBuffer=buffer(cubeXYZ),occupancyTriangleBuffer=gl.createBuffer();
+     const occupancyCenterBuffers=new WeakMap();
+     function occupancyCenterBuffer(record,start,count,resolution,origin){let chunks=occupancyCenterBuffers.get(record);if(!chunks){chunks=new Map();occupancyCenterBuffers.set(record,chunks);}let b=chunks.get(start);if(!b){const centers=new Float32Array(count*3);for(let i=0;i<count;i++)for(let axis=0;axis<3;axis++)centers[i*3+axis]=origin[axis]+(record.indices[start+i][axis]+.5)*resolution;b=buffer(centers);chunks.set(start,b);}return b;}
+    let dirty=false,scheduled=false,lastTick=0,dpr=1;
+    function position(b) { gl.bindBuffer(gl.ARRAY_BUFFER,b); gl.enableVertexAttribArray(attr.position); gl.vertexAttribPointer(attr.position,3,gl.FLOAT,false,0,0); }
+    function draw(b,count,mode,color,opacity=1,offset=0,size=1) {
+      if(!count) return;
+      position(b); gl.disableVertexAttribArray(attr.label); gl.vertexAttrib1f(attr.label,0); gl.disableVertexAttribArray(attr.offset); gl.vertexAttrib3f(attr.offset,0,0,0); gl.uniform1i(uniforms.instanced,0); gl.uniform1i(uniforms.labeled,0); gl.uniform3fv(uniforms.color,color); gl.uniform1f(uniforms.opacity,opacity); gl.uniform1f(uniforms.offset,offset); gl.uniform1f(uniforms.size,size*dpr); gl.uniform1i(uniforms.round,mode===gl.POINTS?1:0); gl.drawArrays(mode,0,count); state.drawCalls++;
+    }
+    function visibleIds() {return Array.from(state.classIds).filter(id=>classById.has(id)&&(state.groundPoints || !planeIds.has(id)));}
+    const cameraViews=[['CAM_FRONT_LEFT','左前 / Front left'],['CAM_FRONT','前 / Front'],['CAM_FRONT_RIGHT','右前 / Front right'],['CAM_BACK_LEFT','左后 / Rear left'],['CAM_BACK','后 / Rear'],['CAM_BACK_RIGHT','右后 / Rear right']];
+    const cameraDialog=$('cameraDialog');
+    let cameraFrame=-1,expandedCamera=null,cameraSemantics=false,cameraPoints=false;
+    function cameraImageSource(image){
+      if(cameraPoints){if(cameraSemantics&&image.overlay_src&&image.overlay_points_src)return image.overlay_points_src;if(image.points_src)return image.points_src;}
+      return cameraSemantics && image.overlay_src ? image.overlay_src : image.src;
+    }
+    function currentCamera(name){return (frames[state.frame].source.camera_images || []).find(image=>image.camera===name);}
+    function updateExpandedCamera(){
+      const image=currentCamera(expandedCamera);
+      if(!image){cameraDialog.close();return;}
+      $('cameraDialogTitle').textContent=`${cameraViews.find(([name])=>name===expandedCamera)[1]} · ${expandedCamera} · ${state.frame+1} / ${frames.length}`;
+      $('cameraFullImage').src=cameraImageSource(image);
+      $('cameraFullImage').alt=$('cameraDialogTitle').textContent;
+      $('cameraImageInfo').textContent=`${frames[state.frame].source.frame_name || frames[state.frame].source.sample_token} · ${Number(frames[state.frame].source.time_s || 0).toFixed(2)} s · ${image.width} × ${image.height}`;
+    }
+    for(const [name,label] of cameraViews){
+      const tile=document.createElement('button');tile.type='button';tile.className='camera-tile';tile.dataset.camera=name;
+      const image=document.createElement('img');image.alt=label;image.decoding='async';
+      const empty=document.createElement('div');empty.className='camera-empty';empty.textContent='无影像 / Unavailable';empty.hidden=true;
+      const caption=document.createElement('span');caption.textContent=label;
+      tile.append(image,empty,caption);tile.title=`${name} · 点击放大 / Click to enlarge`;
+      tile.addEventListener('click',()=>{state.playing=false;expandedCamera=name;updateExpandedCamera();cameraDialog.showModal();invalidate();});
+      image.addEventListener('error',()=>{image.hidden=true;empty.hidden=false;tile.disabled=true;});
+      $('cameraGrid').append(tile);
+    }
+    function updateCameraImages(){
+      if(cameraFrame===state.frame)return;
+      cameraFrame=state.frame;$('cameraFrame').textContent=`${state.frame+1} / ${frames.length}`;
+      const hasSemantics=(frames[state.frame].source.camera_images || []).some(image=>image.overlay_src);
+      for(const id of ['cameraSemantics','cameraDialogSemantics']){
+        $(id).checked=cameraSemantics;$(id).disabled=!hasSemantics;
+        $(id).title=hasSemantics?'':'当前帧未包含语义叠加图 / No semantic overlays in this frame';
+      }
+      const hasPoints=(frames[state.frame].source.camera_images || []).some(image=>image.points_src);
+      for(const id of ['cameraPoints','cameraDialogPoints']){$(id).checked=cameraPoints;$(id).disabled=!hasPoints;$(id).title=hasPoints?'':'当前帧没有投影点云图，请重新导出 / Re-export to include projected LiDAR';}
+      for(const tile of $('cameraGrid').children){
+        const source=currentCamera(tile.dataset.camera),image=tile.querySelector('img'),empty=tile.querySelector('.camera-empty');
+        tile.disabled=!source;image.hidden=!source;empty.hidden=Boolean(source);
+        if(source)image.src=cameraImageSource(source);else image.removeAttribute('src');
+      }
+      if(cameraDialog.open)updateExpandedCamera();
+    }
+    for(const id of ['cameraSemantics','cameraDialogSemantics'])$(id).addEventListener('change',event=>{
+      cameraSemantics=event.target.checked;cameraFrame=-1;updateCameraImages();
+    });
+    for(const id of ['cameraPoints','cameraDialogPoints'])$(id).addEventListener('change',event=>{cameraPoints=event.target.checked;cameraFrame=-1;updateCameraImages();});
+    $('closeCamera').addEventListener('click',()=>cameraDialog.close());
+    cameraDialog.addEventListener('click',event=>{if(event.target===cameraDialog){const r=cameraDialog.getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)cameraDialog.close();}});
+    cameraDialog.addEventListener('close',()=>{if(cameraDialog.open)return;expandedCamera=null;$('cameraFullImage').removeAttribute('src');});
+    function updateText() {
+      updateCameraImages();
+      $('frameNumber').textContent=`${state.frame+1} / ${frames.length}`; $('timeline').value=state.frame;
+      $('stats').textContent=state.mode==='bev-map'?`BEV Map · ${state.mapMethod} · ${state.allFrames?'全帧投票融合 / Fused':'当前帧 / Frame'} ${state.frame+1} / ${frames.length}\n格分辨率 / Resolution  ${mapGrid.resolution} m\n物理尺寸 / Extent  ${(mapGrid.width*mapGrid.resolution).toFixed(1)} × ${(mapGrid.height*mapGrid.resolution).toFixed(1)} m\n栅格 / Grid  ${mapGrid.width} × ${mapGrid.height}\n可见格 / Map cells  ${state.mapCells.toLocaleString()}\n冲突格 / Conflicts  ${state.mapConflictCells.toLocaleString()}\n可见点 / Points  ${state.pointCount.toLocaleString()}`:`${state.allFrames?'全帧地面投票融合 / Voted ground':'当前帧 / Frame'} ${state.frame+1} / ${frames.length}\n可见点 / Points  ${state.pointCount.toLocaleString()}\n可见三角形 / Triangles  ${state.triangleCount.toLocaleString()}`;
+      $('stats').textContent+=`\n实例框 / Instance boxes  ${state.boxCount.toLocaleString()}\n占据体素 / Occupied voxels  ${state.occupancyCount.toLocaleString()}\n来源点数 / Source points  ${state.occupancyPointCount.toLocaleString()}\n未染色体素 / Unassigned voxels  ${state.unassignedOccupancyCount.toLocaleString()}\n未染色来源点 / Unassigned points  ${state.unassignedOccupancyPointCount.toLocaleString()}`;
+      const f=frames[state.frame].source; $('frameInfo').textContent=`${f.frame_name || f.sample_token || ''} · ${Number(f.time_s || 0).toFixed(2)} s`;
+      $('trailWarning').hidden=!state.allFrames; $('allFrames').checked=state.allFrames;
+      $('trailWarning').textContent=state.mode==='bev-map'?'全帧类别投票融合，点云为多时刻叠加。 / Map uses all-frame class voting; points overlay multiple timestamps.':originalWarning;
+      $('playPause').textContent=state.playing?'暂停 / Pause':'播放 / Play'; $('playPause').classList.toggle('active',state.playing);
+    }
+    function render() {
+      dirty=false;
+      if(state.mode==='bev-map'){renderMap();return;}
+      state.mapCells=0;state.mapConflictCells=0;
+      const rect=canvas.getBoundingClientRect(); dpr=Math.min(2,window.devicePixelRatio || 1);
+      const width=Math.max(1,Math.round(rect.width*dpr)),height=Math.max(1,Math.round(rect.height*dpr));
+      if(canvas.width!==width || canvas.height!==height) {canvas.width=width;canvas.height=height;}
+      gl.viewport(0,0,width,height); gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT); gl.useProgram(program); gl.uniformMatrix4fv(uniforms.matrix,false,matrix());
+      state.pointCount=0;state.occupancyCount=0;state.occupancyPointCount=0;state.unassignedOccupancyCount=0;state.unassignedOccupancyPointCount=0;state.triangleCount=0;state.boxCount=0;state.boxDrawCalls=0;state.drawCalls=0;state.pointDrawCalls=0;state.surfaceDrawCalls=0;
+      draw(gridBuffer,grid.length/3,gl.LINES,[.81,.85,.88],.65);
+      const selected=state.allFrames?frames:[frames[state.frame]];
+      gl.depthMask(false);
+      for(const method of state.methods){
+        const fused=state.allFrames?fusedSurfaces(method):null;
+        const surfaces=fused?[fused]:selected.map(frame=>frame.surfaces[method]);
+        for(const group of surfaces)for(const id of planeClassIds){
+          if(!state.classIds.has(id))continue;const surface=group[id];if(!surface.count)continue;
+          if(!surface.buffer)surface.buffer=buffer(surface.xyz);
+          draw(surface.buffer,surface.count,gl.TRIANGLES,classById.get(id).color.map(v=>v/255),Number($('planeOpacity').value),method==='grid_projection'?.055:method==='occupancy_flat'?.045:.035);
+          state.triangleCount+=surface.count/3;state.surfaceDrawCalls++;
+        }
+      }
+      gl.depthMask(true);
+      if(state.boxes)for(const f of selected)for(const [id,group] of f.boxGroups){
+        if(!state.classIds.has(id))continue;
+        const color=classById.get(id).color.map(v=>v*.7/255);state.boxCount+=group.records.length;
+        if(group.lines.length){if(!group.lineBuffer)group.lineBuffer=buffer(group.lines);draw(group.lineBuffer,group.lines.length/3,gl.LINES,color,1,.07);state.boxDrawCalls++;}
+        if(group.singletons.length){if(!group.pointBuffer)group.pointBuffer=buffer(group.singletons);draw(group.pointBuffer,group.singletons.length/3,gl.POINTS,color,1,.07,6);state.boxDrawCalls++;}
+      }
+      const voxelLayers=[
+        {enabled:state.occupancy&&hasOccupancy,record:state.allFrames?occupancyFused:occupancyFrames[state.frame],resolution:occupancyResolution,origin:occupancyOrigin,unassigned:false},
+        {enabled:state.unassignedOccupancy&&hasUnassignedOccupancy,record:state.allFrames?unassignedFused:unassignedFrames[state.frame],resolution:unassignedResolution,origin:unassignedOrigin,unassigned:true}
+      ];
+      for(const layer of voxelLayers){
+        if(!layer.enabled)continue;
+        const occupancy=layer.record,opacity=Number($('occupancyOpacity').value),resolution=layer.resolution,origin=layer.origin;
+        for(const group of occupancy.groups){
+          if(!layer.unassigned&&group.classId!==null&&!state.classIds.has(group.classId))continue;
+          if(layer.unassigned){state.unassignedOccupancyCount+=group.voxelCount;state.unassignedOccupancyPointCount+=group.pointCount;}
+          else{state.occupancyCount+=group.voxelCount;state.occupancyPointCount+=group.pointCount;}
+          const color=layer.unassigned?[.55,.60,.65]:group.classId===null?[.12,.58,.69]:classById.get(group.classId).color.map(v=>v/255);
+          if(occupancyExtension){
+            position(occupancyCubeBuffer);gl.disableVertexAttribArray(attr.label);gl.vertexAttrib1f(attr.label,0);
+            gl.uniform3fv(uniforms.color,new Float32Array(color));gl.uniform1f(uniforms.opacity,opacity);gl.uniform1f(uniforms.offset,0);
+            gl.uniform1f(uniforms.voxelSize,resolution);gl.uniform1f(uniforms.size,1);gl.uniform1i(uniforms.labeled,0);gl.uniform1i(uniforms.round,0);gl.uniform1i(uniforms.instanced,1);
+            for(let start=0;start<group.indices.length;start+=occupancyChunkSize){
+              const count=Math.min(occupancyChunkSize,group.indices.length-start),instanceBuffer=occupancyCenterBuffer(group,start,count,resolution,origin);
+              gl.bindBuffer(gl.ARRAY_BUFFER,instanceBuffer);gl.enableVertexAttribArray(attr.offset);gl.vertexAttribPointer(attr.offset,3,gl.FLOAT,false,0,0);
+              occupancyExtension.vertexAttribDivisorANGLE(attr.offset,1);occupancyExtension.drawArraysInstancedANGLE(gl.TRIANGLES,0,36,count);occupancyExtension.vertexAttribDivisorANGLE(attr.offset,0);state.drawCalls++;
+            }
+          }else{
+            for(let start=0;start<group.indices.length;start+=256){
+              const count=Math.min(256,group.indices.length-start),triangles=new Float32Array(count*108);let cursor=0;
+              for(let i=0;i<count;i++){const index=group.indices[start+i];for(let v=0;v<108;v+=3){for(let axis=0;axis<3;axis++)triangles[cursor++]=origin[axis]+(index[axis]+.5)*resolution+cubeXYZ[v+axis]*resolution;}}
+              gl.bindBuffer(gl.ARRAY_BUFFER,occupancyTriangleBuffer);gl.bufferData(gl.ARRAY_BUFFER,triangles,gl.STREAM_DRAW);draw(occupancyTriangleBuffer,triangles.length/3,gl.TRIANGLES,color,opacity);
+            }
+          }
+        }
+      }
+      const ids=visibleIds(); const visible=new Float32Array(Array.from({length:classSlots},(_,i)=>ids.includes(i)?1:0)); gl.uniform1fv(uniforms.visible,visible);
+      if(state.points && ids.length) for(const f of selected) {
+        const count=ids.reduce((sum,id)=>sum+f.histogram[id],0); state.pointCount+=count;
+        if(!count) continue;
+        if(!f.xyzBuffer) {f.xyzBuffer=buffer(f.xyz);f.labelBuffer=buffer(f.labels);}
+        position(f.xyzBuffer);gl.disableVertexAttribArray(attr.offset);gl.vertexAttrib3f(attr.offset,0,0,0);gl.uniform1i(uniforms.instanced,0);gl.bindBuffer(gl.ARRAY_BUFFER,f.labelBuffer);gl.enableVertexAttribArray(attr.label);gl.vertexAttribPointer(attr.label,1,gl.UNSIGNED_BYTE,false,0,0);
+        gl.uniform1i(uniforms.labeled,1);gl.uniform1i(uniforms.round,1);gl.uniform1f(uniforms.size,Number($('pointSize').value)*dpr);gl.uniform1f(uniforms.opacity,1);gl.uniform1f(uniforms.offset,0);
+        gl.drawArrays(gl.POINTS,0,f.count);state.drawCalls++;state.pointDrawCalls++;
+      }
+      if(state.trajectory) {
+        draw(trajectoryBuffer,trajectory.length/3,gl.LINE_STRIP,[.12,.36,.43],.9,.12);
+        const ego=frames[state.frame].source.ego || [0,0,0];gl.bindBuffer(gl.ARRAY_BUFFER,markerBuffer);gl.bufferSubData(gl.ARRAY_BUFFER,0,new Float32Array(ego));
+        draw(markerBuffer,1,gl.POINTS,[.08,.18,.24],1,.2,13);draw(markerBuffer,1,gl.POINTS,[1,.82,.22],1,.22,8);
+      }
+      const error=gl.getError(); if(error!==gl.NO_ERROR) throw new Error('WebGL rendering error: '+error);
+      state.renderCount++;updateText(); window.__sceneViewerReady=true;
+    }
+    function tick(now) {
+      scheduled=false;
+      try {
+        if(state.playing && !state.allFrames && now-lastTick>=1000/Number($('fps').value)) {state.frame=(state.frame+1)%frames.length;lastTick=now;dirty=true;}
+        if(dirty) render();
+        if(state.playing) schedule();
+      }catch(error){state.playing=false;fail(error);}
+    }
+    function schedule(){if(!scheduled){scheduled=true;requestAnimationFrame(tick);}}
+    function invalidate(){dirty=true;schedule();}
+    function setFrame(n){state.frame=Math.max(0,Math.min(frames.length-1,Math.round(Number(n)||0)));invalidate();}
+    function setAllFrames(value){state.allFrames=Boolean(value);if(state.allFrames)state.playing=false;invalidate();}
+    function play(){if(state.allFrames || frames.length<2)return;state.playing=!state.playing;lastTick=performance.now();invalidate();}
+    $('timeline').addEventListener('input',event=>setFrame(event.target.value));
+    $('prevFrame').addEventListener('click',()=>setFrame((state.frame-1+frames.length)%frames.length));
+    $('nextFrame').addEventListener('click',()=>setFrame((state.frame+1)%frames.length));
+    $('playPause').addEventListener('click',play);$('allFrames').addEventListener('change',event=>setAllFrames(event.target.checked));
+    for(const method of surfaceMethods) $(method+'Layer').addEventListener('change',event=>{event.target.checked?state.methods.add(method):state.methods.delete(method);invalidate();});
+    for(const [id,key] of [['pointLayer','points'],['groundPointLayer','groundPoints'],['bboxLayer','boxes'],['occupancyLayer','occupancy'],['unassignedOccupancyLayer','unassignedOccupancy'],['trajectoryLayer','trajectory']]) $(id).addEventListener('change',event=>{state[key]=event.target.checked;invalidate();});
+    for(const id of ['pointSize','planeOpacity','occupancyOpacity']) $(id).addEventListener('input',()=>{$(id+'Value').textContent=$(id).value;invalidate();});
+    function selectClasses(value){document.querySelectorAll('[data-class]').forEach(c=>{c.checked=value;});state.classIds=new Set(value?classes.map(c=>c.id):[]);invalidate();}
+    $('selectAll').addEventListener('click',()=>selectClasses(true));$('selectNone').addEventListener('click',()=>selectClasses(false));
+    function fit(){camera.target=center.slice();camera.distance=radius*Math.max(2.65,2.65/Math.max(.25,canvas.clientWidth/canvas.clientHeight));camera.yaw=-Math.PI/3;camera.pitch=Math.PI/3;invalidate();}
+    $('scene3dView').addEventListener('click',()=>setMode('3d'));$('bevMapView').addEventListener('click',()=>setMode('bev-map'));
+    $('groundMapMethod').addEventListener('change',event=>{const method=event.target.value;if(method==='polygon'||(method==='grid_projection'&&hasProjectedMap)||(method==='occupancy_flat'&&hasFlatMap)){state.mapMethod=method;invalidate();}});
+    $('mapGrid').addEventListener('change',event=>{state.mapGrid=event.target.checked;invalidate();});
+    $('exportMap').addEventListener('click',()=>{if(state.mode!=='bev-map')return;render();const link=document.createElement('a');link.download=`${DATA.scene || 'scene'}-${state.mapMethod}-${state.allFrames?'fused':state.frame+1}-bev.png`;link.href=mapCanvas.toDataURL('image/png');link.click();});
+    $('fitView').addEventListener('click',()=>state.mode==='bev-map'?fitMap():fit());$('topView').addEventListener('click',()=>{camera.pitch=Math.PI/2-.001;invalidate();});$('orbitView').addEventListener('click',()=>{camera.pitch=Math.PI/3;invalidate();});
+    let mapDrag=null;
+    mapCanvas.addEventListener('contextmenu',event=>event.preventDefault());
+    mapCanvas.addEventListener('pointerdown',event=>{if(event.button!==0&&event.button!==2)return;mapDrag={x:event.clientX,y:event.clientY};mapCanvas.setPointerCapture(event.pointerId);});
+    mapCanvas.addEventListener('pointermove',event=>{if(!mapDrag)return;mapView.x-=(event.clientX-mapDrag.x)/mapView.scale;mapView.y+=(event.clientY-mapDrag.y)/mapView.scale;mapDrag={x:event.clientX,y:event.clientY};invalidate();});
+    for(const name of ['pointerup','pointercancel','lostpointercapture'])mapCanvas.addEventListener(name,()=>{mapDrag=null;});
+    mapCanvas.addEventListener('wheel',event=>{event.preventDefault();const rect=mapCanvas.getBoundingClientRect(),x=event.clientX-rect.left-rect.width/2,y=event.clientY-rect.top-(rect.height-50)/2,previous=mapView.scale;mapView.scale=Math.max(.0001,Math.min(20000/mapGrid.resolution,previous*Math.exp(-event.deltaY*.001)));mapView.x+=x/previous-x/mapView.scale;mapView.y-=y/previous-y/mapView.scale;invalidate();},{passive:false});
+    let drag=null;
+    canvas.addEventListener('contextmenu',event=>event.preventDefault());
+    canvas.addEventListener('pointerdown',event=>{drag={x:event.clientX,y:event.clientY,pan:event.button===2||event.shiftKey};canvas.setPointerCapture(event.pointerId);});
+    canvas.addEventListener('pointermove',event=>{
+      if(!drag)return;const dx=event.clientX-drag.x,dy=event.clientY-drag.y;drag.x=event.clientX;drag.y=event.clientY;
+      if(drag.pan||event.shiftKey){const scale=camera.distance*2*Math.tan(Math.PI/8)/Math.max(1,canvas.clientHeight);const right=[-Math.sin(camera.yaw),Math.cos(camera.yaw),0],up=[-Math.cos(camera.yaw)*Math.sin(camera.pitch),-Math.sin(camera.yaw)*Math.sin(camera.pitch),Math.cos(camera.pitch)];camera.target=camera.target.map((v,i)=>v-dx*scale*right[i]+dy*scale*up[i]);}
+      else{camera.yaw-=dx*.006;camera.pitch=Math.max(.035,Math.min(Math.PI/2-.001,camera.pitch+dy*.006));}invalidate();
+    });
+    const endDrag=()=>{drag=null;};canvas.addEventListener('pointerup',endDrag);canvas.addEventListener('pointercancel',endDrag);canvas.addEventListener('lostpointercapture',endDrag);
+    canvas.addEventListener('wheel',event=>{event.preventDefault();camera.distance=Math.max(radius*.025,Math.min(radius*100,camera.distance*Math.exp(event.deltaY*.001)));invalidate();},{passive:false});
+    document.addEventListener('keydown',event=>{if(cameraDialog.open)return;if(event.target.closest('input,select,textarea,button,[contenteditable=true]'))return;if(event.code==='Space'){event.preventDefault();play();}else if(event.code==='ArrowLeft'){event.preventDefault();setFrame((state.frame-1+frames.length)%frames.length);}else if(event.code==='ArrowRight'){event.preventDefault();setFrame((state.frame+1)%frames.length);}});
+    window.addEventListener('resize',invalidate); if(window.ResizeObserver)new ResizeObserver(invalidate).observe($('stage'));
+    canvas.addEventListener('webglcontextlost',event=>{event.preventDefault();state.playing=false;fail(new Error('WebGL context lost; reload this file.'));});
+    window.__sceneViewer={data:DATA,getState:()=>({mode:state.mode,mapMethod:state.mapMethod,mapCells:state.mapCells,mapConflictCells:state.mapConflictCells,mapWidth:hasMap?mapGrid.width:0,mapHeight:hasMap?mapGrid.height:0,resolution:hasMap?mapGrid.resolution:0,mapGrid:state.mapGrid,mapZoom:mapView.scale,mapPixelsPerCell:hasMap?mapView.scale*mapGrid.resolution:0,mapCenter:[mapView.x,mapView.y],frame:state.frame,allFrames:state.allFrames,planeClassIds:planeClassIds.slice(),availableClassIds:classes.map(c=>c.id),classIds:Array.from(state.classIds).sort((a,b)=>a-b),methods:Array.from(state.methods).sort(),pointCount:state.pointCount,triangleCount:state.triangleCount,drawCalls:state.drawCalls,pointDrawCalls:state.pointDrawCalls,surfaceDrawCalls:state.surfaceDrawCalls,renderCount:state.renderCount,playing:state.playing,points:state.points,groundPoints:state.groundPoints,boxes:state.boxes,boxCount:state.boxCount,boxDrawCalls:state.boxDrawCalls,occupancy:state.occupancy,occupancyCount:state.occupancyCount,occupancyPointCount:state.occupancyPointCount,unassignedOccupancy:state.unassignedOccupancy,unassignedOccupancyCount:state.unassignedOccupancyCount,unassignedOccupancyPointCount:state.unassignedOccupancyPointCount,availableUnassignedOccupancy:hasUnassignedOccupancy,occupancyInstanced:Boolean(occupancyExtension),availableOccupancy:hasOccupancy,availableBoxCount,trajectory:state.trajectory,pointSize:Number($('pointSize').value),planeOpacity:Number($('planeOpacity').value),camera:{target:camera.target.slice(),distance:camera.distance,yaw:camera.yaw,pitch:camera.pitch}}),setFrame,setAllFrames,render:()=>{try{render();}catch(error){fail(error);throw error;}}};
+    fit();render();
+  } catch(error) { fail(error); }
+})();
+</script>
+</body>
+</html>

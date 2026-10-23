@@ -60,7 +60,7 @@ bash tasks/nuimages/scripts/run.sh
 bash tasks/nuscenes_sam3/scripts/run.sh
 ```
 
-如果只需要最近约定的 **sidewalk、road、pedestrian、vehicle、bike、rider 六类**，使用同一任务下的六类模式；只有 sidewalk、road 铺面，其余类保留观测语义：
+类别现在直接从 [自定义类别配置](tasks/nuscenes_sam3/config/six_classes.txt) 读取，支持新增 crosswalk 等类别；旧入口名 `run_six_classes.sh` 继续保留。默认 sidewalk、road 铺面，其余类保留观测点；通过 `--plane-classes` 明确选择平面：
 
 ```bash
 bash tasks/nuscenes_sam3/scripts/run_six_classes.sh
@@ -73,6 +73,127 @@ bash tasks/nuscenes_sam3/scripts/run_six_classes.sh
 默认范围 **100 m × 100 m**，粒度 **0.2 m**，对应 **500 × 500** 栅格；原生 LiDAR 坐标 +x 向右、+y 向上。标准入口输出至 `outputs/nuscenes_sam3/<时间戳>/`，`result.html` 顶部是 BEV 分区，图片集中到 `results/BEV/<帧>/`。六类入口输出至 `outputs/nuscenes_six_classes/<时间戳>/`，结果页优先展示 BEV。
 
 提示词：[16 类配置](tasks/nuscenes_sam3/config/nuscenes_classes.txt)、[六类配置](tasks/nuscenes_sam3/config/six_classes.txt)。vehicle 包含汽车/卡车/公交/挂车，bike 包含自行车/摩托车，rider 是骑乘者本人。六类模式不直接沿用 16 类指标，lidarseg 也没有独立 rider 真值。
+
+### 图形化生成器
+
+不想输入命令参数时，启动本地生成器：
+
+```bash
+bash tasks/nuscenes_sam3/scripts/run_generator.sh
+```
+
+Windows 可双击或运行 `tasks\nuscenes_sam3\scripts\run_generator.bat`。浏览器打开 **http://127.0.0.1:8765**；服务在WSL的现有 `vla-supervised` 中运行，不额外安装Web框架。
+
+界面支持增删类别、编辑对应英文提示词（`|`分隔别名）、逐类勾选“平面”，并通过复选框选择一个或多个mini场景。场景列表包含描述、帧数、训练/验证划分和本地可用状态，可搜索、筛选和全选。默认只生成所选场景合计1帧；勾选“生成所选场景的全部帧”才处理全部所选帧。高级参数支持起始帧、BEV地图分辨率、平面Z、补面最大边长、投影最大距离及GPU/CPU。
+
+点击“预览配置”检查预估量，或直接“开始生成”。右侧显示运行状态、相机图像进度、实时日志、停止按钮、历史任务及“打开场景结果”。同一时间只运行一个生成任务。输出位于 `outputs/nuscenes_generator/<运行ID>/`，每次独立保存 `classes.txt`、`ui_config.json`、`job.json`、`run.log` 和 `output/`；**不会覆盖原提示词TXT**，输出类别/平面选择跟随该任务保存。停止后保留已生成文件，完整查看器以成功完成的结果为准。服务保持开启时可通过结果链接查看场景；离线也可打开输出中的HTML。
+
+`--port 8766` 可更改端口，`--dataset-dir`、`--classes-file`、`--output-root` 可在启动UI时指定。关闭启动终端即可结束服务。
+
+### 每个 Instance 的最小矩形 Bounding Box
+
+新生成的场景HTML在图层区提供 **“实例矩形框 / Instance boxes”** 复选框，默认隐藏。勾选后3D场景和BEV Map都能显示每个实例的 **最小面积旋转矩形**；框独立于点云/平面显示开关，并跟随当前帧、全部帧及类别筛选。平面类别的实例也保留框，不把同类别区域合成一个框。
+
+矩形覆盖该相机局部实例当前保留的全部支持点XY，不裁剪ROI、不人为加宽，Z放在该实例支持点高度中位数。启用SOR/DBSCAN时用清洗后点；关闭时用原始支持点。单点/共线点保留为点/线段，面积为0；无支持点实例保留空记录但不绘制。该框是可见点集的水平BEV包围框，不是3D检测框，也不保证覆盖被遮挡的完整物体；跨相机同一物体可能重复出现，框ID不是轨迹ID。
+
+无需新增生成参数，现有UI、`run_scenes.sh` 和自定义分割入口自动生成。已有保存instance点归属的结果可以重新导出：
+
+```bash
+bash tasks/nuscenes_sam3/scripts/run_scenes.sh \
+  --input-dir outputs/instance_filter_combined_verified/segmentation \
+  --point-filter sor_dbscan --dbscan-eps 1.2 \
+  --output-dir outputs/scene_with_instance_boxes
+```
+
+每帧保存 `scenes/<scene>/<sample_token>_boxes.json`，包含相机/实例ID、类别、支持点索引、四角坐标、中心、长宽、方向角和面积；场景 `manifest.json` 记录框统计及文件路径，HTML内嵌相同框几何。自定义分割和实例凸包输出还保存原生LiDAR坐标的 `instance_boxes.json`。旧结果没有实例点归属时不会用整个语义类别冒充实例，框开关会禁用；需先重新分割保存真实归属。
+
+### Instance 支持点清洗：SOR / DBSCAN
+
+生成器UI新增“实例点云清洗”算法选择：关闭（默认）、SOR、DBSCAN、SOR→DBSCAN，可展开调整参数。按每个相机局部SAM3实例的原始3D支持点单独清理，不把同类别的多个人/车合为一簇；跨相机同类保留点取并集。图片分割mask和零水平面IPM保持原预测，清洗用于染色支持点、点多边形及其BEV Map。未保留点的显示标签置0，原始坐标/类别/索引不删除。
+
+```bash
+bash tasks/nuscenes_sam3/scripts/run_scenes.sh \
+  --scenes scene-0103 --samples 1 \
+  --plane-classes sidewalk road crosswalk \
+  --point-filter sor_dbscan \
+  --sor-k 16 --sor-std 2 \
+  --dbscan-eps 1.2 --dbscan-min-samples 5 \
+  --cluster-policy significant --min-cluster-size 10 --cluster-ratio 0.1 \
+  --output-dir outputs/filtered_scene
+```
+
+`--point-filter` 取 `none`、`sor`、`dbscan`、`sor_dbscan`，同参数也适用于 `run_six_classes.sh` 和 `run_instances.sh`。SOR按每点k个邻居平均距离，超出“总体均值 + sor_std × 总体标准差”删除；k不包含自身，少量点自动缩小k，最多2点时SOR保留。DBSCAN的eps单位米、min-samples包含自身；`largest` 仅保留最大簇，`significant` 保留点数不少于 `max(min-cluster-size, 最大簇点数×cluster-ratio)` 的簇，噪声及未达条件的团块删除。没有有效簇时该实例可能被全部清除，不会悄悄退回原点集。
+
+**稀疏远处真实目标也可能被清除**，尤其crosswalk/行人支持点少时。初次建议先用SOR或较小min-cluster-size/较大eps，并查看清洗对比，不能把清洗当作精度提升保证。场景索引提供“清洗对比”，`scenes/<scene>/cleaning/<sample>/` 保存原/清洗标签、保留掩码、移除点索引、逐实例JSON及红绿对比图。新分割保存 `point_instances.json` 供以后在 `run_scenes.sh --input-dir ... --point-filter ...` 中更换算法，无需重跑SAM3；旧结果若没有实例点归属会明确要求重新生成，不会用语义类别冒充实例。
+
+### 自选平面类别（含 crosswalk）
+
+提示词TXT决定 **识别哪些类别**，`--plane-classes` 决定 **其中哪些生成平面**；两者分开配置。你新增的crosswalk保留原提示词，当前七类ID按文件顺序为sidewalk1、road2、crosswalk3、pedestrian4、vehicle5、bike6、rider7。颜色和rider/行人冲突处理按类别名称，不固定旧ID。
+
+```bash
+# 从头识别：道路、人行道、人行横道均生成平面与BEV Map。
+bash tasks/nuscenes_sam3/scripts/run_scenes.sh \
+  --scenes scene-0103 --samples 0 \
+  --plane-classes sidewalk road crosswalk \
+  --output-dir outputs/scene_with_crosswalk_planes
+
+# 已有包含crosswalk的分割结果：只让road铺面，其余类显示为染色点云。
+bash tasks/nuscenes_sam3/scripts/run_scenes.sh \
+  --input-dir outputs/crosswalk_planes_verified/segmentation \
+  --plane-classes road \
+  --output-dir outputs/road_plane_only
+```
+
+参数同时作用于零水平面IPM、点多边形、BEV Map和HTML，选中的平面类别仍分别保留标签；也适用于 `run_six_classes.sh --plane-classes ...` 与 `tasks/flat_ground/scripts/run.sh --plane-classes ...`（旧 `--project-classes` 是同义参数）。默认不额外把crosswalk当平面，需明确加入；新运行默认sidewalk/road，复用结果不指定时优先沿用保存的平面选择。未列入的已识别类仍有分割/点云，不被删除；在HTML中可通过类别开关隐藏。
+
+每次输出保存自己的 `classes.json`、配置taxonomy和plane_class_ids，旧结果按自己的类别表解释。改TXT后不会把旧pedestrian3误解释为新crosswalk3；旧分割没有crosswalk时须重跑分割才能增加该类别。每个类别是单标签掩码，已接受的crosswalk优先覆盖road/未分配像素，避免同片道路覆盖斑马线；这仍受提示词分割误差影响。
+
+### 场景 HTML：两种路面、染色点云与时间轴
+
+六类入口现在自动生成 `scenes/index.html` 场景目录，每个场景一个可离线打开的 `scenes/<scene>/viewer.html`。页面可在 **零水平面 IPM** 与 **BEV 点多边形** 两种道路/人行道平面之间切换或同时显示；行人、车辆、bike、rider 仍直接渲染原始三维染色点，不做物体平面扩展。
+
+- 时间轴拖动、前后帧按钮、播放/暂停和 FPS 选择；也可一次叠加显示该 HTML 内的全部帧。
+- 路面方法、染色点、地面支持点、自车轨迹分别开关；sidewalk、road、pedestrian、vehicle、bike、rider 各类独立显示/隐藏，未分配点默认为隐藏。
+- 鼠标旋转、右键/Shift平移、滚轮缩放；提供俯视、3D、适应场景按钮、点大小及平面透明度调整。
+
+直接生成一个完整场景（`--samples 0` 表示当前筛选下的全部帧）：
+
+```bash
+bash tasks/nuscenes_sam3/scripts/run_scenes.sh \
+  --scenes scene-0103 --samples 0 \
+  --output-dir outputs/my_scene_viewer
+```
+
+已有六类输出无需重新分割：
+
+```bash
+bash tasks/nuscenes_sam3/scripts/run_scenes.sh \
+  --input-dir outputs/nuscenes_six_classes/20261016_135902_151161 \
+  --output-dir outputs/my_saved_scene_viewer
+```
+
+有 `--input-dir` 时默认导出已有的全部帧；无输入时默认只运行一帧。输入含多个场景会分别生成 HTML，索引明确显示“已导出帧数 / 数据集场景总帧数”，不会将部分结果称为完整场景。六类入口的普通 `result.html` 会链接到场景查看器，`--no-scene-viewer` 可跳过附加导出。
+
+两种路面和点云都通过各传感器时间戳的位姿，对齐到场景首个显示帧的自车XY/yaw坐标系，单位米。IPM 保持全局 `z=0`；点多边形沿用0.2米栅格、最大6米边长的局部补面，再按该类观测点的全局高度中位数放置为水平片。原始三维点保留完整坐标和索引，不抽样、不压平；多帧叠加保留动态物体轨迹，不做跟踪。每帧NPZ和场景 `manifest.json` 保存变换、路面标签、精确逐行矩形/三角形及支持计数；矩形网格化保留孔洞，不会用凸包跨越未填充区域。HTML内嵌全量数据且不依赖CDN/服务器；较长场景的文件和显存占用随帧数增加。
+
+### BEV Map：将路面分成固定米制格子
+
+场景查看器新增 **BEV Map** 按钮，可在原3D场景与正交栅格地图之间切换。零水平面IPM与BEV点多边形两种平面分别重采样到同一场景XY格网，默认 **0.2米/格**；单帧显示当前帧地图，“全部帧”显示按格融合的场景地图。方法下拉框选择 IPM/Polygon，不改变3D图层；类别开关控制road/sidewalk格子和其它类别点云叠加。可拖动平移、滚轮缩放、显示细网格及导出PNG。
+
+新运行 `run_scenes.sh` 或六类管线会自动包含地图。已有场景可直接升级，无需重新分割或投影：
+
+```bash
+bash tasks/nuscenes_sam3/scripts/run_bev_map.sh \
+  --input-dir outputs/nuscenes_scene0103_complete/scenes \
+  --map-resolution 0.2 \
+  --output-dir outputs/nuscenes_scene0103_bev_map
+```
+
+`run_scenes.sh --map-resolution 0.4` 可改变新导出地图的格子大小。场景地图按整段路面范围建立，不固定为单帧500x500；本次scene-0103的40帧为 **1086x597格、217.2米x119.4米**。坐标仍是场景首帧自车XY/yaw，+X向右、+Y向上。
+
+每个目标格用格子中心反查原平面格网，不新增膨胀/插值填洞。全帧融合每帧每格最多一票；票数多的类别胜出，平票取sidewalk（ID1），无标签为0并弃票。`conflict` 标记曾同时得到road与sidewalk证据的格子；`observation_count` 是有标签的帧数，**不是实测地面次数**。缺证据区域不是可通行空间。地图显示压平高度，原3D点和面数据保留。
+
+每场景 `bev_map/` 保存：两种方法的 `ipm_map.png` / `polygon_map.png`、`*_fused.npz`（labels、class_votes、observation_count、conflict、tie）、`*_conflicts.png`、每帧 `<sample_token>.npz` 和 `metadata.json`。HTML内嵌单帧/融合标签，可离线使用；升级保留原场景数值数据路径供后续重新导出。
 
 同属本任务的扩展实验：
 

@@ -12,12 +12,15 @@ from tasks.nuscenes_sam3.python.six_class import NAMES,RiderMask,categories_from
 
 
 class SixClassTests(unittest.TestCase):
-    def test_exact_six_prompts_and_ids(self):
-        categories=categories_from_txt(ROOT/'tasks/nuscenes_sam3/config/six_classes.txt')
-        self.assertEqual([row.name for row in categories],['sidewalk','road','pedestrian','vehicle','bike','rider'])
-        self.assertEqual([row.id for row in categories],list(range(1,7)))
-        with self.assertRaises(ValueError):
-            categories_from_txt(ROOT/'tasks/nuscenes_sam3/config/nuscenes_classes.txt')
+    def test_configured_prompts_and_ids_are_not_fixed_to_six(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path=Path(directory)/'classes.txt'
+            path.write_text('sidewalk = sidewalk\nroad = road\ncrosswalk = crosswalk\npedestrian = person\nvehicle = car\nbike = bicycle\nrider = person riding a bicycle\n')
+            categories=categories_from_txt(path)
+            self.assertEqual([row.name for row in categories],['sidewalk','road','crosswalk','pedestrian','vehicle','bike','rider'])
+            self.assertEqual([row.id for row in categories],list(range(1,8)))
+        categories=categories_from_txt(ROOT/'tasks/nuscenes_sam3/config/nuscenes_classes.txt')
+        self.assertEqual(len(categories),16)
 
     def test_rider_overrides_only_person_or_unassigned(self):
         evidence=RiderMask((1,6))
@@ -40,6 +43,25 @@ class SixClassTests(unittest.TestCase):
         self.assertGreater(int((result['filled']==1).sum()),3)
         self.assertEqual(result['metadata']['ground_class_ids'],[1,2])
         np.testing.assert_array_equal(prediction,[2,2,2,2,4,1,1,1])
+
+    def test_bev_outputs_use_supplied_palette_for_observed_and_filled_cells(self):
+        xyz=np.array([[0,0,0],[2,0,0],[0,2,0],[2,2,0],[1,1,1]],np.float32)
+        labels=np.array([2,2,2,2,4],np.uint8)
+        palette=make_palette();palette[2]=[19,37,211];palette[4]=[251,101,7]
+        with tempfile.TemporaryDirectory() as directory:
+            output=Path(directory)
+            save_frame_bev(output,xyz,labels,np.ones(len(xyz),bool),palette,.2,10,3)
+            with np.load(output/'six_class_plane.npz',allow_pickle=False) as grid:
+                for filename,key in (('bev_six_sparse.png','sparse_prediction'),
+                                     ('bev_six_plane.png','plane_prediction'),
+                                     ('road_sidewalk_plane.png','road_sidewalk_filled')):
+                    with Image.open(output/filename) as image:rgb=np.array(image)
+                    ids=grid[key]
+                    self.assertTrue((ids==2).any())
+                    np.testing.assert_array_equal(rgb[ids==2],np.tile(palette[2],((ids==2).sum(),1)))
+                    if (ids==4).any():
+                        np.testing.assert_array_equal(rgb[ids==4],np.tile(palette[4],((ids==4).sum(),1)))
+                self.assertTrue(grid['inferred'].any())
 
     def test_final_plane_preserves_foreground_and_stores_no_gt_metric(self):
         xyz=np.array([[0,0,0],[2,0,0],[0,2,0],[2,2,0],[1,1,0],[3,0,0],[0,3,0]],np.float32)

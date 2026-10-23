@@ -18,6 +18,7 @@ from shared.python.runtime import ROOT, ensure_environment, save_json
 from shared.python.sam3 import Sam3Segmenter
 from tasks.nuscenes_sam3.python.sam3_nuscenes import load_categories
 from tasks.nuscenes_sam3.python.instance_hulls import instance_rgb, save_hull_bev
+from tasks.nuscenes_sam3.python.instance_filter import add_filter_args,config_from_args,clean_instances
 
 
 class InstancePointCollector:
@@ -154,6 +155,7 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument('--no-merge-overlap', action='store_true', help='Skip the separate cross-camera shared-point merge comparison')
     result.add_argument('--min-shared-points', type=int, default=3)
     result.add_argument('--min-overlap', type=float, default=.3, help='Shared points / smaller instance point set')
+    add_filter_args(result)
     result.add_argument('--output-dir', type=Path, help='New/empty directory; default outputs/nuscenes_instance_hulls/<timestamp>')
     return result
 
@@ -161,6 +163,7 @@ def parser() -> argparse.ArgumentParser:
 def main(argv=None) -> int:
     args = parser().parse_args(argv)
     ensure_environment()
+    filter_config=config_from_args(args)
     from tasks.nuscenes_sam3.python.instance_merge import merge_instances_by_points
     merge_instances_by_points([], args.min_shared_points, args.min_overlap)
     if not np.isfinite(args.ground_max_edge) or args.ground_max_edge <= 0:
@@ -187,11 +190,11 @@ def main(argv=None) -> int:
     segmenter = Sam3Segmenter(args.checkpoint.resolve(), args.device, args.precision, args.score_threshold, args.mask_threshold)
     output.mkdir(parents=True, exist_ok=True)
     run = {key: str(value) if isinstance(value, Path) else value for key, value in vars(args).items()}
-    run.update(status='running', processed_frames=0, selected_frames=len(selected), python=sys.executable,
+    run.update(point_filter_config=filter_config,status='running', processed_frames=0, selected_frames=len(selected), python=sys.executable,
                started_at=datetime.now(timezone.utc).isoformat(),
                instance_scope='camera-local masks preserved; separate constrained shared-point cross-camera association unless disabled',
                overlapping_masks='highest confidence wins within a camera; ties preserve earlier detection',
-               polygon='minimal convex hull of exclusive ROI projected XY points; no point interpolation or outlier trimming',
+               polygon='convex hull of retained instance ROI points; optional outlier filter recorded separately',
                evaluation=None, limitations='Sparse semantic lidarseg has no matching SAM3 instance truth; convex interior is hypothesized coverage.')
     save_json(output / 'run_config.json', run)
     frame_outputs = []
@@ -224,8 +227,18 @@ def main(argv=None) -> int:
                 overlay.save(cameras_dir / f"{view['camera']}_instances_overlay.jpg", quality=94)
                 camera_panel(image, overlay, projection, collector, offset, view['camera']).save(cameras_dir / f"{view['camera']}_comparison.jpg", quality=94)
                 print(f"{view['camera']}: {len(camera_instances)} masks, {(collector.point_ids != 0).sum()} assigned points, {time.perf_counter() - started:.1f}s", flush=True)
+            filtered=clean_instances(xyz,instances,filter_config)
+            save_json(frame_dir/'original_point_instances.json',instances)
+            save_json(frame_dir/'point_filter.json',filtered['stats'])
+            filtered_camera_ids=np.zeros_like(point_camera_ids)
+            for record in filtered['instances']:
+                camera_index=[view['camera'] for view in views].index(record['camera'])
+                filtered_camera_ids[camera_index,record['point_indices']]=record['global_instance_id']
+            instances=filtered['instances']
+            from tasks.nuscenes_sam3.python.instance_boxes import save_instance_boxes
+            save_instance_boxes(frame_dir/'instance_boxes.json',xyz,instances,'native LIDAR_TOP XYZ, meters')
             np.savez_compressed(frame_dir / 'points.npz', xyz=xyz, raw_labels=full['raw_labels'],
-                                camera_instance_ids=point_camera_ids, camera_names=np.array([view['camera'] for view in views]))
+                                camera_instance_ids=point_camera_ids,filtered_camera_instance_ids=filtered_camera_ids, camera_names=np.array([view['camera'] for view in views]))
             hulls = save_hull_bev(frame_dir, xyz, instances, class_names, args.bev_resolution, args.bev_roi_size)
             summary = {'sample_token': first['sample_token'], 'lidar_token': first['lidar_token'],
                        'camera_names': [view['camera'] for view in views], 'instances': len(instances),

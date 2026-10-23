@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from contextlib import nullcontext
 from dataclasses import dataclass
+import inspect
 from pathlib import Path
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
@@ -50,6 +51,23 @@ def merge_instance(prediction: np.ndarray, best_score: np.ndarray, mask: np.ndar
     best_score[update] = score
 
 
+def _load_local_sam3_checkpoint(model, checkpoint: Path, torch) -> None:
+    """Map a local ZIP checkpoint and assign its storages without a CPU copy."""
+    if not torch.load.__module__.startswith('torch') or 'mmap' not in inspect.signature(torch.load).parameters:
+        raise RuntimeError('此PyTorch版本不支持SAM3检查点内存映射加载 / PyTorch mmap checkpoint loading is unavailable')
+    checkpoint_state=torch.load(str(checkpoint),map_location='cpu',weights_only=True,mmap=True)
+    if isinstance(checkpoint_state.get('model'),dict):checkpoint_state=checkpoint_state['model']
+    state={key.replace('detector.',''):value for key,value in checkpoint_state.items() if 'detector' in key}
+    if model.inst_interactive_predictor is not None:
+        state.update({key.replace('tracker.','inst_interactive_predictor.model.'):value
+                      for key,value in checkpoint_state.items() if 'tracker' in key})
+    if 'assign' not in inspect.signature(model.load_state_dict).parameters:
+        raise RuntimeError('此PyTorch版本不支持零拷贝权重分配 / PyTorch assign checkpoint loading is unavailable')
+    missing,unexpected=model.load_state_dict(state,strict=False,assign=True)
+    if missing:print(f'loaded {checkpoint} with missing keys: {missing=}')
+    if unexpected:print(f'loaded {checkpoint} with unexpected keys: {unexpected=}')
+
+
 class Sam3Segmenter:
     def __init__(self, checkpoint: Path, device: str, precision: str, score_threshold: float, mask_threshold: float):
         import torch
@@ -68,10 +86,13 @@ class Sam3Segmenter:
         self.device = device
         self.precision = precision
         self.mask_threshold = mask_threshold
-        self.processor = Sam3Processor(
-            build_sam3_image_model(checkpoint_path=str(checkpoint), load_from_HF=False, device=device, eval_mode=True, compile=False),
-            device=device, confidence_threshold=score_threshold,
-        )
+        model_builder=build_sam3_image_model
+        model=model_builder(checkpoint_path=None,load_from_HF=False,device='cpu',eval_mode=True,compile=False)
+        _load_local_sam3_checkpoint(model,checkpoint,torch)
+        # Move assigned checkpoint storages to the target device after loading.
+        if device=='cuda':model=model.cuda()
+        model.eval()
+        self.processor=Sam3Processor(model,device=device,confidence_threshold=score_threshold)
 
     def predict(self, image: Image.Image, categories: list[Category], *, instance_callback=None) -> tuple[np.ndarray, list[dict]]:
         """Predict semantic labels; optionally stream each original instance mask.
